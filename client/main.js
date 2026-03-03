@@ -3,7 +3,7 @@ import kaboom from "./lib/kaboom.mjs";
 kaboom({
     width: window.innerWidth,
     height: window.innerHeight,
-    clearColor: [0.15, 0.2, 0.1, 1],
+    clearColor: [0.16, 0.55, 0.82, 1],
     preventPauseOnBlur: true,
 });
 
@@ -167,19 +167,22 @@ onUpdate(() => {
     }
     camScale(CAM_ZOOM);
 
-    // Nascondo label se sotto cespuglio o albero
-    const me = players[myId].sprite;
-    let nascosto = players[myId].morto;
-    if (!nascosto) {
+    // Nascondo label/hp se il player (chiunque) è sotto cespuglio o albero
+    for (const id in players) {
+        const p = players[id];
+        if (p.morto) continue;
+
+        const sprite = p.sprite;
+        let nascosto = false;
         for (const o of ostacoliSopra) {
-            if (Math.hypot(me.pos.x - o.x, me.pos.y - o.y) < o.r) {
+            if (Math.hypot(sprite.pos.x - o.x, sprite.pos.y - o.y) < o.r) {
                 nascosto = true;
                 break;
             }
         }
+        if (p.labelObj) p.labelObj.hidden = nascosto;
+        if (p.hpBar)    p.hpBar.hidden    = nascosto;
     }
-    if (players[myId].labelObj) players[myId].labelObj.hidden = nascosto;
-    if (players[myId].hpBar)    players[myId].hpBar.hidden    = nascosto;
 });
 
 // =================
@@ -208,11 +211,29 @@ socket.on("init", ({ id, map, ostacoli }) => {
     ostacoliSopra = ostacoli.filter(o => o.type === "cespuglio" || o.type === "albero");
 
     // Costruisco la mappa
+    const spiaggia = 80; // larghezza fascia spiaggia in pixel
+
+    // Mare (sfondo azzurro, oltre i bordi della mappa)
+    add([
+        pos(-5000, -5000),
+        rect(map.width + 10000, map.height + 10000),
+        color(rgb(40, 140, 210)),
+        z(-12),
+    ]);
+
+    // Spiaggia (fascia gialla attorno alla mappa giocabile)
+    add([
+        pos(-spiaggia, -spiaggia),
+        rect(map.width + spiaggia * 2, map.height + spiaggia * 2),
+        color(rgb(230, 200, 100)),
+        z(-11),
+    ]);
+
+    // Terreno interno (erba verde)
     add([
         pos(0, 0),
         rect(map.width, map.height),
-        color(rgb(30, 45, 20)),
-        outline(6, rgb(60, 80, 40)),
+        color(rgb(60, 120, 40)),
         z(-10),
     ]);
 
@@ -249,8 +270,8 @@ socket.on("init", ({ id, map, ostacoli }) => {
             add([
                 pos(o.x, o.y), anchor("center"),
                 circle(o.r),
-                color(rgb(50, 120, 30)),
-                outline(2, rgb(30, 90, 15)),
+                color(rgb(100, 200, 40)),
+                outline(2, rgb(60, 140, 20)),
                 z(2),
             ]);
         }
@@ -313,7 +334,7 @@ socket.on("state", (state) => {
             const hpBar = add([
                 pos(s.pos.x - 25, s.pos.y - 42),
                 rect(50 * (s.hp / 100), 6),
-                color(rgb(0, 220, 0)),
+                color(isMe ? rgb(0, 220, 0) : rgb(220, 0, 0)),
                 z(3),
             ]);
             players[id] = { sprite, labelObj, hpBar, morto: s.morto };
@@ -333,9 +354,12 @@ socket.on("state", (state) => {
             const eraMorto = p.morto;
             p.morto = s.morto;
 
-            p.sprite.hidden   = s.morto;
-            p.labelObj.hidden = s.morto;
-            p.hpBar.hidden    = s.morto;
+            p.sprite.hidden = s.morto;
+            // label e hpBar: se morto nascondo; altrimenti ci pensa onUpdate (alberi/cespugli)
+            if (s.morto) {
+                p.labelObj.hidden = true;
+                p.hpBar.hidden    = true;
+            }
 
             if (!s.morto) {
                 // Se è appena respawnato e sono io, chiudo il menu
@@ -360,9 +384,6 @@ socket.on("state", (state) => {
                 p.hpBar.pos.x = p.sprite.pos.x - 25;
                 p.hpBar.pos.y = p.sprite.pos.y - 42;
                 p.hpBar.width = 50 * (s.hp / 100);
-                if (s.hp > 60)      p.hpBar.color = rgb(0, 220, 0);
-                else if (s.hp > 30) p.hpBar.color = rgb(220, 180, 0);
-                else                p.hpBar.color = rgb(220, 0, 0);
             }
         }
     }
