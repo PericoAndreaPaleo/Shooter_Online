@@ -1,0 +1,13 @@
+{
+  "name": "shooter-online",
+  "version": "1.0.0",
+  "description": "Multiplayer top-down shooter with Socket.IO and Kaboom.js",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.1"
+  }
+}
