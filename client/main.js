@@ -7,6 +7,16 @@ kaboom({
     preventPauseOnBlur: true,
 });
 
+// Ridimensiona canvas al resize senza stretching
+window.addEventListener("resize", () => {
+    const c = document.querySelector("canvas");
+    if (!c) return;
+    c.width = window.innerWidth;
+    c.height = window.innerHeight;
+    c.style.width = window.innerWidth + "px";
+    c.style.height = window.innerHeight + "px";
+});
+
 document.body.style.cursor = "crosshair";
 const canvas = document.querySelector("canvas");
 canvas.style.cursor = "crosshair";
@@ -54,16 +64,6 @@ function creaGunDrawObj() {
                     const p = players[id];
                     if (!p || p.morto || !p.dirIndicator || !p.sprite) continue;
 
-                    // Solo il nome scompare nei cespugli
-                    let neiCespugli = false;
-                    for (const o of ostacoliSopra) {
-                        if (Math.hypot(p.sprite.pos.x - o.x, p.sprite.pos.y - o.y) < o.r) {
-                            neiCespugli = true; break;
-                        }
-                    }
-                    if (p.labelObj) p.labelObj.hidden = neiCespugli;
-                    if (p.hpBar)    p.hpBar.hidden    = neiCespugli;
-
                     const angle = p.dirIndicator.angle || 0;
                     const wtype = (id === myId) ? weapon : (p.dirIndicator.weapon || "gun");
                     const px = p.sprite.pos.x;
@@ -87,8 +87,22 @@ function creaGunDrawObj() {
                             const fy = py + sin * fistDist + perp.y * 17 * side;
                             drawHand(fx, fy, 8);
                         }
+                    } else if (wtype === "pistol") {
+                        // Pistola: corta, una mano
+                        const gunW = 30, gunH = 9, gunRad = 4;
+                        drawRect({
+                            pos: vec2(px + cos * R, py + sin * R),
+                            width: gunW, height: gunH,
+                            color: rgb(17, 17, 17),
+                            radius: gunRad,
+                            angle: angle * (180 / Math.PI),
+                            anchor: "left",
+                            offset: vec2(0, -gunH / 2),
+                        });
+                        // Una sola mano centrata
+                        drawHand(px + cos*(R+3), py + sin*(R+3), 7);
                     } else {
-                        // Arma: 60px
+                        // Assalto: 60px, due mani
                         const gunW = 60, gunH = 9, gunRad = 4;
                         drawRect({
                             pos: vec2(px + cos * R, py + sin * R),
@@ -99,9 +113,7 @@ function creaGunDrawObj() {
                             anchor: "left",
                             offset: vec2(0, -gunH / 2),
                         });
-                        // Mano 1 (vicina): lato canna
                         drawHand(px + cos*(R+2) - perp.x*3, py + sin*(R+2) - perp.y*3, 7);
-                        // Mano 2 (lontana): lato opposto
                         drawHand(px + cos*(R+30) + perp.x*5, py + sin*(R+30) + perp.y*5, 7);
                     }
                 }
@@ -131,7 +143,7 @@ const players = {};
 const bulletSprites = {};
 const input = { left: false, right: false, up: false, down: false };
 let prevInput = "";
-let weapon = "gun"; // "gun" | "fists"
+let weapon = "gun"; // "gun" | "pistol" | "fists"
 
 // ========================
 // FIX #12 — Audio con Web Audio API (nessuna dipendenza)
@@ -306,7 +318,10 @@ let hudWeaponObj = null;
 function aggiornaHUDArma() {
     if (hudWeaponObj) destroy(hudWeaponObj);
     hudWeaponObj = add([
-        text(weapon === "gun" ? "[1] Assalto  3: Pugni" : "1: Assalto  [3] Pugni", { size: 14 }),
+        text(
+                weapon === "gun"    ? "[1] Assalto  2: Pistola  3: Pugni" :
+                weapon === "pistol" ? "1: Assalto  [2] Pistola  3: Pugni" :
+                                      "1: Assalto  2: Pistola  [3] Pugni", { size: 14 }),
         pos(14, height() - 52),
         color(rgb(255, 220, 80)),
         fixed(), z(100),
@@ -361,8 +376,9 @@ window.addEventListener("keydown", (e) => {
         prevInput = JSON.stringify(input);
     }
     // Cambio arma
-    if (e.key === "1") { weapon = "gun";   socket.emit("setWeapon", "gun");   aggiornaHUDArma(); }
-    if (e.key === "3") { weapon = "fists"; socket.emit("setWeapon", "fists"); aggiornaHUDArma(); }
+    if (e.key === "1") { weapon = "gun";    socket.emit("setWeapon", "gun");    aggiornaHUDArma(); }
+    if (e.key === "2") { weapon = "pistol"; socket.emit("setWeapon", "pistol"); aggiornaHUDArma(); clearInterval(autoFireInterval); autoFireInterval = null; }
+    if (e.key === "3") { weapon = "fists";  socket.emit("setWeapon", "fists");  aggiornaHUDArma(); clearInterval(autoFireInterval); autoFireInterval = null; }
 });
 window.addEventListener("keyup", (e) => {
     if (inMenu) return;
@@ -464,31 +480,56 @@ function disegnaJoystick(dx, dy) {
 function shoot() {
     if (inMenu || !myId || !players[myId] || players[myId].morto) return;
     if (weapon === "fists") return;
+    if (weapon === "pistol") {
+        const now = performance.now();
+        if (now - lastPistolShot < PISTOL_COOLDOWN_MS) return;
+        lastPistolShot = now;
+    }
     const me = players[myId].sprite;
     const mworld = toWorld(mousePos());
     const dir = { x: mworld.x - me.pos.x, y: mworld.y - me.pos.y };
     const angle = Math.atan2(dir.y, dir.x);
+    // Calcola punta arma in world coords
+    const R = 24;
+    const GUN_LEN = weapon === "pistol" ? 10 : 40;
+    const tipDist = R + GUN_LEN;
+    const len = Math.hypot(dir.x, dir.y);
+    const nx = dir.x / len, ny = dir.y / len;
+    // Manda solo l'offset dalla punta — il server aggiunge alla sua posizione
+    const tipOffset = { x: nx * tipDist, y: ny * tipDist };
     socket.emit("aim", angle);
-    socket.emit("shoot", { dir });
+    socket.emit("shoot", { dir, tipOffset });
     playShootSound();
 }
 
 // Assalto: sparo automatico tenendo premuto il mouse
 let mouseDown = false;
-let autoFireInterval = null;
-const AUTO_FIRE_MS = 120; // ~8 colpi/sec
+const AUTO_FIRE_MS = 120;   // assalto: ms tra colpi
+const PISTOL_COOLDOWN_MS = 150;
+let lastPistolShot = 0;
+let lastAssaltoShot = 0;
+
+// Auto-fire assalto via rAF — timing preciso basato su performance.now()
+function autoFireLoop(ts) {
+    if (mouseDown && weapon === "gun") {
+        if (ts - lastAssaltoShot >= AUTO_FIRE_MS) {
+            shoot();
+            lastAssaltoShot = ts;
+        }
+    }
+    requestAnimationFrame(autoFireLoop);
+}
+requestAnimationFrame(autoFireLoop);
 
 window.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return;
     mouseDown = true;
-    shoot(); // sparo immediato al click
-    autoFireInterval = setInterval(shoot, AUTO_FIRE_MS);
+    shoot();
+    lastAssaltoShot = performance.now();
 });
 window.addEventListener("mouseup", (e) => {
     if (e.button !== 0) return;
     mouseDown = false;
-    clearInterval(autoFireInterval);
-    autoFireInterval = null;
 });
 
 // ========================
@@ -527,8 +568,8 @@ socket.on("init", ({ id, map, ostacoli }) => {
     }
     for (const o of ostacoli) {
         if (o.type === "albero") {
-            add([pos(o.x, o.y), anchor("center"), circle(o.r), color(rgb(20, 75, 15)), outline(4, rgb(10, 45, 8)), z(2)]);
-            add([pos(o.x, o.y), anchor("center"), circle(o.rCollisione), color(rgb(80, 50, 20)), z(2)]);
+            add([pos(o.x, o.y), anchor("center"), circle(o.r), color(rgb(20, 75, 15)), outline(4, rgb(10, 45, 8)), z(4)]);
+            add([pos(o.x, o.y), anchor("center"), circle(o.rCollisione), color(rgb(80, 50, 20)), z(4)]);
         }
     }
     for (const o of ostacoli) {
@@ -540,6 +581,14 @@ socket.on("init", ({ id, map, ostacoli }) => {
     aggiornaHUDStats();
     aggiornaHUDArma();
     creaGunDrawObj();
+    // Ricrea HUD al resize finestra
+    onResize(() => {
+        aggiornaHUDArma();
+        aggiornaHUDStats();
+        if (myId && players[myId] && players[myId].sprite && !inMenu) {
+            camPos(players[myId].sprite.pos.x, players[myId].sprite.pos.y);
+        }
+    });
     mostraMenu();
 });
 
@@ -606,6 +655,8 @@ socket.on("state", (state) => {
         if (!state.players[id]) {
             if (players[id].labelObj) destroy(players[id].labelObj);
             if (players[id].hpBar) destroy(players[id].hpBar);
+            if (players[id].hpBarGray) destroy(players[id].hpBarGray);
+            if (players[id].hpBarBg) destroy(players[id].hpBarBg);
             if (players[id].spriteInner) destroy(players[id].spriteInner);
             destroy(players[id].sprite);
             delete players[id];
@@ -620,7 +671,7 @@ socket.on("state", (state) => {
             myDeaths++;
             aggiornaHUDStats();
             playDeathSound(); // fix #12
-            mostraMenu(null, "Sei stato eliminato! Respawn tra 3 secondi...");
+            mostraMenu(null, "Sei stato eliminato!");
         }
 
         if (!players[id]) {
@@ -641,22 +692,42 @@ socket.on("state", (state) => {
             const dirIndicator = { angle: s.angle || 0, visible: true };
 
             // fix #5 — nickname leggibile (non socket id)
-            const labelObj = add([
-                pos(s.pos.x, s.pos.y - 32),
+            const labelObj = isMe ? add([
+                pos(s.pos.x, s.pos.y + 41),
                 anchor("center"),
-                text(isMe ? (myNickname || "TU") : (s.nickname || id.slice(0, 4)), { size: 13 }),
-                color(isMe ? rgb(0, 255, 100) : rgb(220, 80, 80)),
-                z(3),
-            ]);
-
-            const hpBar = isMe ? add([
-                pos(s.pos.x - 25, s.pos.y - 44),
-                rect(50 * (s.hp / 100), 6),
-                color(rgb(0, 220, 0)),
-                z(3),
+                text(myNickname || "TU", { size: 13 }),
+                color(rgb(0, 220, 255)),
+                z(-1),
             ]) : null;
 
-            players[id] = { sprite, spriteInner, labelObj, hpBar, dirIndicator, morto: s.morto };
+            // Colore: verde piena vita -> giallo -> rosso
+            const hpColor = (hp) => {
+                const t = hp / 100;
+                if (t > 0.5) return rgb(Math.round((1-t)*2*220), 220, 0);
+                return rgb(220, Math.round(t*2*220), 0);
+            };
+            // Tutte le barre: anchor "left", stessa x/y di riferimento
+            // bordo nero: 302x14, grigio: 300x12, colore: larghezza variabile x12
+            const hpBarBg = null, hpBarGray = null;
+            const hpBar = isMe ? add([
+                fixed(), z(200),
+                { _disp: s.hp,
+                  draw() {
+                    const bx = width()/2 - 150, by = height() - 44, r = 4;
+                    const W = 300, H = 20;
+                    // bordo
+                    drawRect({ pos: vec2(bx-2, by-2), width: W+4, height: H+4, radius: r+1, color: rgb(30,30,30) });
+                    // sfondo grigio
+                    drawRect({ pos: vec2(bx, by), width: W, height: H, radius: r, color: rgb(90,90,90) });
+                    // vita colorata
+                    const t = this._disp/100;
+                    const c = t > 0.5 ? rgb(Math.round((1-t)*2*220),220,0) : rgb(220,Math.round(t*2*220),0);
+                    if (this._disp > 0) drawRect({ pos: vec2(bx, by), width: Math.max(W*(this._disp/100), r*2), height: H, radius: r, color: c });
+                  }
+                }
+            ]) : null;
+
+            players[id] = { sprite, spriteInner, labelObj, hpBar, hpBarGray, hpBarBg, dirIndicator, morto: s.morto };
 
             if (isMe) {
                 distruggiUI();
@@ -673,8 +744,11 @@ socket.on("state", (state) => {
             p.morto = s.morto;
 
             if (s.morto) {
-                p.labelObj.hidden = true;
+                p.sprite.hidden = true;
+                if (p.labelObj) p.labelObj.hidden = true;
                 if (p.hpBar) p.hpBar.hidden = true;
+                if (p.hpBarGray) p.hpBarGray.hidden = true;
+                if (p.hpBarBg) p.hpBarBg.hidden = true;
                 p.dirIndicator.visible = false;
             }
 
@@ -686,7 +760,16 @@ socket.on("state", (state) => {
                     cameraInizializzata = false;
                     prevInput = "";
                     canvas.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: window.innerWidth / 2, clientY: window.innerHeight / 2 }));
+                    // Ricrea barre vita al respawn
+                    if (!p.hpBarBg || !p.hpBarBg.exists()) {
+                        const bx = width() / 2, by = height() - 30;
+                        p.hpBar = add([fixed(), z(200), { _disp: s.hp, draw() { const bx=width()/2-150,by=height()-47,r=4,W=300,H=20; drawRect({pos:vec2(bx-2,by-2),width:W+4,height:H+4,radius:r+1,color:rgb(30,30,30)}); drawRect({pos:vec2(bx,by),width:W,height:H,radius:r,color:rgb(90,90,90)}); const t=this._disp/100; const c=t>0.5?rgb(Math.round((1-t)*2*220),220,0):rgb(220,Math.round(t*2*220),0); if(this._disp>0)drawRect({pos:vec2(bx,by),width:Math.max(W*(this._disp/100),r*2),height:H,radius:r,color:c}); } }]);
+                    }
+                    if (p.hpBar) p.hpBar.hidden = false;
+                    if (p.hpBarGray) p.hpBarGray.hidden = false;
+                    if (p.hpBarBg) p.hpBarBg.hidden = false;
                 }
+                p.sprite.hidden = false;
 
                 // fix #6 — hit flash
                 if (s.hitFlash) {
@@ -704,15 +787,14 @@ socket.on("state", (state) => {
                     p.spriteInner.pos.y = p.sprite.pos.y;
                 }
 
-                p.labelObj.pos.x += (s.pos.x - p.labelObj.pos.x) * lerp;
-                p.labelObj.pos.y += (s.pos.y - 32 - p.labelObj.pos.y) * lerp;
-                // fix #5 — aggiorno nickname in tempo reale
-                if (!isMe && s.nickname) p.labelObj.text = s.nickname;
+                if (p.labelObj) {
+                    p.labelObj.pos.x += (s.pos.x - p.labelObj.pos.x) * lerp;
+                    p.labelObj.pos.y += (s.pos.y + 41 - p.labelObj.pos.y) * lerp;
+                }
 
                 if (p.hpBar) {
-                    p.hpBar.pos.x = p.sprite.pos.x - 25;
-                    p.hpBar.pos.y = p.sprite.pos.y - 44;
-                    p.hpBar.width = 50 * (s.hp / 100);
+                    p.hpBar._disp += (s.hp - p.hpBar._disp) * 0.15;
+                    if (Math.abs(s.hp - p.hpBar._disp) < 0.3) p.hpBar._disp = s.hp;
                 }
 
                 // fix #13 — aggiorno angolo pistola (disegnata da overlayCanvas)

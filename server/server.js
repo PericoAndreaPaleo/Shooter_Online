@@ -39,8 +39,8 @@ for (let i = 0; i < 70; i++) {
 
 const PLAYER_RADIUS = 20;
 const PLAYER_MAX_HP = 100;
-const BULLET_DAMAGE = 20;
-const SHOOT_COOLDOWN_MS = 120; // assalto: ~8 colpi/sec
+const DAMAGE_BY_WEAPON = { gun: 20, pistol: 15, fists: 0 };
+const COOLDOWN_BY_WEAPON = { gun: 120, pistol: 150, fists: 0 };
 const ostacoliSolidi = ostacoli.filter(o => o.type !== "cespuglio");
 
 const players = {};
@@ -114,6 +114,7 @@ io.on("connection", socket => {
         nickname: "Player",
         lastShot: 0,
         hitFlash: false,
+        lastHit: 0,
         weapon: "gun"
     };
 
@@ -156,7 +157,7 @@ io.on("connection", socket => {
 
     socket.on("setWeapon", (w) => {
         const p = players[socket.id];
-        if (!p || (w !== "gun" && w !== "fists")) return;
+        if (!p || (w !== "gun" && w !== "pistol" && w !== "fists")) return;
         p.weapon = w;
     });
 
@@ -165,18 +166,26 @@ io.on("connection", socket => {
         const p = players[socket.id];
         if (!p || p.morto) return;
         const now = Date.now();
-        if (now - p.lastShot < SHOOT_COOLDOWN_MS) return;
+        const cooldown = COOLDOWN_BY_WEAPON[p.weapon] ?? 120;
+        if (now - p.lastShot < cooldown) return;
         p.lastShot = now;
         if (!data || typeof data.dir !== "object" || data.dir === null) return;
-        const { dir } = data;
+        const { dir, tipOffset } = data;
         if (typeof dir.x !== "number" || typeof dir.y !== "number") return;
         const len = Math.hypot(dir.x, dir.y);
         if (len === 0 || !isFinite(len)) return;
+        const nx = dir.x / len, ny = dir.y / len;
+        // Offset punta arma sulla posizione server (sempre centrato)
+        const MAX_TIP = 100;
+        const ox = (tipOffset && Math.abs(tipOffset.x) < MAX_TIP) ? tipOffset.x : 0;
+        const oy = (tipOffset && Math.abs(tipOffset.y) < MAX_TIP) ? tipOffset.y : 0;
+        const bx = p.pos.x + ox, by = p.pos.y + oy;
         proiettili.push({
             id: nextBulletId++,
-            pos: { x: p.pos.x, y: p.pos.y },
-            dir: { x: dir.x / len, y: dir.y / len },
+            pos: { x: bx, y: by },
+            dir: { x: nx, y: ny },
             owner: socket.id,
+            weapon: p.weapon,
             spawnTime: now
         });
     });
@@ -212,6 +221,17 @@ setInterval(() => {
         risolviCollisioni(p);
     }
 
+    // Rigenerazione vita: +2hp/sec dopo 4s senza danni
+    const REGEN_DELAY = 4000;   // ms prima di rigenerare
+    const REGEN_RATE  = 8;      // hp/sec
+    for (const id in players) {
+        const p = players[id];
+        if (p.morto || p.hp >= PLAYER_MAX_HP) continue;
+        if (now - p.lastHit >= REGEN_DELAY) {
+            p.hp = Math.min(PLAYER_MAX_HP, p.hp + REGEN_RATE * dt);
+        }
+    }
+
     // Aggiornamento proiettili
     for (let i = proiettili.length - 1; i >= 0; i--) {
         const b = proiettili[i];
@@ -237,8 +257,9 @@ setInterval(() => {
             const p = players[id];
             if (p.morto) continue;
             if (Math.hypot(b.pos.x - p.pos.x, b.pos.y - p.pos.y) < PLAYER_RADIUS + 6) {
-                p.hp -= BULLET_DAMAGE;
+                p.hp -= DAMAGE_BY_WEAPON[b.weapon] ?? 20;
                 p.hitFlash = true; // fix #6
+                p.lastHit = now;
                 hit = true;
                 if (p.hp <= 0) {
                     p.hp = 0;
@@ -249,17 +270,7 @@ setInterval(() => {
                     if (leaderboard[b.owner]) leaderboard[b.owner].kills++;
                     // fix #4 — notifica kill all'uccisore
                     io.to(b.owner).emit("killConfirm", { victim: players[id]?.nickname || "?" });
-                    // Respawn automatico con posizione sicura (fix #7)
-                    const deadId = id;
-                    setTimeout(() => {
-                        const rp = players[deadId];
-                        if (rp && rp.morto) {
-                            rp.pos = spawnPos();
-                            rp.hp = PLAYER_MAX_HP;
-                            rp.morto = false;
-                            rp.dir = { x: 0, y: 0 };
-                        }
-                    }, 3000);
+                    // Respawn manuale — il giocatore preme il bottone
                 }
                 break;
             }
