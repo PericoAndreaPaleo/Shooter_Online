@@ -40,7 +40,7 @@ for (let i = 0; i < 70; i++) {
 const PLAYER_RADIUS = 20;
 const PLAYER_MAX_HP = 100;
 const DAMAGE_BY_WEAPON = { gun: 20, pistol: 15, fists: 0 };
-const COOLDOWN_BY_WEAPON = { gun: 120, pistol: 150, fists: 0 };
+const COOLDOWN_BY_WEAPON = { gun: 120, pistol: 250, fists: 0 };
 const ostacoliSolidi = ostacoli.filter(o => o.type !== "cespuglio");
 
 const players = {};
