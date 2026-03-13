@@ -85,11 +85,12 @@ const CAM_ZOOM = 1;
 const socket = io();
 
 let myId = null;
+let myLobbyId = null;
 let mapSize = { width: 5000, height: 5000 };
 let ostacoliSopra = [];
 let cameraInizializzata = false;
 let inMenu = true;
-let myNickname = "";
+let myNickname = ""; // assegnato dal server
 
 const players = {};
 const bulletSprites = {};
@@ -180,36 +181,29 @@ function mostraMenu(titolo, sottotitolo) {
     distruggiUI();
     inMenu = true;
     uiLayer.push(add([rect(width(),height()), pos(0,0), color(rgb(5,10,5)), opacity(0.88), fixed(), z(200)]));
-    uiLayer.push(add([text("SHOOTER ONLINE",{size:52}), pos(width()/2,height()/2-160), anchor("center"), color(rgb(0,255,100)), fixed(), z(201)]));
+    uiLayer.push(add([text("SHOOTER ONLINE",{size:52}), pos(width()/2,height()/2-140), anchor("center"), color(rgb(0,255,100)), fixed(), z(201)]));
+    if (myNickname) {
+        uiLayer.push(add([text(myNickname,{size:22}), pos(width()/2,height()/2-70), anchor("center"), color(rgb(0,200,255)), fixed(), z(201)]));
+    }
     if (sottotitolo) {
-        uiLayer.push(add([text(sottotitolo,{size:26}), pos(width()/2,height()/2-90), anchor("center"), color(rgb(220,80,80)), fixed(), z(201)]));
+        uiLayer.push(add([text(sottotitolo,{size:26}), pos(width()/2,height()/2-35), anchor("center"), color(rgb(220,80,80)), fixed(), z(201)]));
     }
 
     htmlContainer = document.createElement("div");
-    htmlContainer.style.cssText = "position:fixed;left:50%;top:50%;transform:translate(-50%,-10px);display:flex;flex-direction:column;align-items:center;gap:12px;z-index:9999;";
-
-    const nick_input = document.createElement("input");
-    nick_input.type = "text"; nick_input.placeholder = "Il tuo nickname...";
-    nick_input.maxLength = 12; nick_input.value = myNickname || "";
-    nick_input.style.cssText = "width:200px;height:44px;font-size:20px;background:#111;color:#0f0;border:2px solid #0f0;border-radius:6px;text-align:center;font-family:monospace;outline:none;letter-spacing:1px;";
+    htmlContainer.style.cssText = "position:fixed;left:50%;top:50%;transform:translate(-50%,30px);display:flex;flex-direction:column;align-items:center;gap:12px;z-index:9999;";
 
     const btn = document.createElement("button");
     btn.textContent = "GIOCA";
-    btn.style.cssText = "width:200px;height:56px;background:rgb(0,180,70);color:white;font-size:28px;font-weight:bold;border:none;border-radius:6px;cursor:pointer;font-family:monospace;letter-spacing:2px;";
+    btn.style.cssText = "width:220px;height:60px;background:rgb(0,180,70);color:white;font-size:30px;font-weight:bold;border:none;border-radius:6px;cursor:pointer;font-family:monospace;letter-spacing:2px;";
     btn.addEventListener("click", () => {
-        const nick = nick_input.value.trim().slice(0,12) || "Player";
-        myNickname = nick;
-        socket.emit("setNickname", nick);
         nascondiElementiHTML();
         distruggiUI();
         socket.emit("spawn");
     });
-    nick_input.addEventListener("keydown", (e) => { if (e.key==="Enter") btn.click(); });
 
-    htmlContainer.appendChild(nick_input);
     htmlContainer.appendChild(btn);
     document.body.appendChild(htmlContainer);
-    setTimeout(() => nick_input.focus(), 50);
+    setTimeout(() => btn.focus(), 50);
 }
 
 // ========================
@@ -221,6 +215,7 @@ let leaderboardObjs = [];
 let hudKillsObj = null;
 let myKills = 0, myDeaths = 0;
 let hudWeaponObj = null;
+let hudLobbyObj = null;
 
 function aggiornaHUDArma() {
     if (hudWeaponObj) destroy(hudWeaponObj);
@@ -235,6 +230,11 @@ function aggiornaHUDArma() {
 function aggiornaHUDStats() {
     if (hudKillsObj) destroy(hudKillsObj);
     hudKillsObj = add([text(`K: ${myKills}  M: ${myDeaths}`,{size:16}), pos(14,height()-30), color(rgb(0,255,100)), fixed(), z(100)]);
+}
+function aggiornaHUDLobby() {
+    if (hudLobbyObj) destroy(hudLobbyObj);
+    if (!myLobbyId) return;
+    hudLobbyObj = add([text(`Lobby: ${myLobbyId}`,{size:11}), pos(14,14), color(rgb(120,120,120)), fixed(), z(100)]);
 }
 function mostraKillFeed(msg) {
     killFeedList.unshift({ msg, timer: 3.5 });
@@ -282,7 +282,7 @@ let joystickTouchId = null;
 let joystickCenter = { x:0, y:0 };
 let aimTouchId = null;
 let aimTouchPos = { x:0, y:0 };
-let touchFireInterval = null; // non usato
+let touchFireInterval = null;
 let touchFiring = false;
 
 function aggiornaWeaponBtns() {
@@ -296,7 +296,6 @@ function aggiornaWeaponBtns() {
 function creaTouchUI() {
     if (!isMobile() || joystickEl) return;
 
-    // Canvas joystick
     joystickEl = document.createElement("canvas");
     joystickEl.width  = (JOYSTICK_R+10)*2;
     joystickEl.height = (JOYSTICK_R+10)*2;
@@ -305,7 +304,6 @@ function creaTouchUI() {
     joystickCenter = { x: 24+JOYSTICK_R+10, y: window.innerHeight-24-JOYSTICK_R-10 };
     disegnaJoystick(0,0);
 
-    // Pulsanti arma
     if (!weaponBtns.length) {
         const wdefs = [
             { key:"gun",    label:"AR", color:"#e55" },
@@ -357,7 +355,6 @@ function disegnaJoystick(dx, dy) {
     ctx.strokeStyle="rgba(255,255,255,0.9)"; ctx.lineWidth=2; ctx.stroke();
 }
 
-// Touch events
 window.addEventListener("touchstart", (e) => {
     if (inMenu) return;
     for (const t of e.changedTouches) {
@@ -378,7 +375,6 @@ window.addEventListener("touchstart", (e) => {
                 const sp = worldToScreen(players[myId].sprite.pos.x, players[myId].sprite.pos.y);
                 socket.emit("aim", Math.atan2(ty-sp.y, tx-sp.x));
             }
-            // Segna che il dito destro è premuto — il loop rAF gestisce il timing
             touchFiring = true;
         }
     }
@@ -466,9 +462,6 @@ function shoot() {
     playShootSound();
 }
 
-// ========================
-// SPARO TOUCH
-// ========================
 function shootTouch() {
     if (inMenu || !myId || !players[myId] || players[myId].morto) return;
     if (weapon === "fists") return;
@@ -490,19 +483,14 @@ function shootTouch() {
     playShootSound();
 }
 
-// Loop di sparo unificato — usa performance.now() per timing preciso
 function fireLoop() {
     const now = performance.now();
-
-    // DESKTOP — assalto autofire
     if (mouseDown && weapon === "gun") {
         if (now - lastAssaltoShot >= AUTO_FIRE_MS) {
             shoot();
             lastAssaltoShot = now;
         }
     }
-
-    // TOUCH — sparo con timing preciso
     if (touchFiring) {
         const cooldown = weapon === "gun" ? AUTO_FIRE_MS : PISTOL_COOLDOWN_MS;
         if (weapon !== "fists" && now - lastTouchShot >= cooldown) {
@@ -510,7 +498,6 @@ function fireLoop() {
             lastTouchShot = now;
         }
     }
-
     requestAnimationFrame(fireLoop);
 }
 requestAnimationFrame(fireLoop);
@@ -531,13 +518,13 @@ onMouseMove(() => {
 // ========================
 // INIT
 // ========================
-socket.on("init", ({ id, map, ostacoli }) => {
+socket.on("init", ({ id, map, ostacoli, lobbyId, nickname }) => {
     if (!sessionStorage.getItem("reloaded")) {
         sessionStorage.setItem("reloaded","1");
         location.reload();
         return;
     }
-    myId=id; mapSize=map;
+    myId=id; mapSize=map; myLobbyId=lobbyId; myNickname=nickname;
     ostacoliSopra=ostacoli.filter(o=>o.type==="cespuglio"||o.type==="albero");
 
     const spiaggia=80;
@@ -560,8 +547,9 @@ socket.on("init", ({ id, map, ostacoli }) => {
 
     aggiornaHUDStats();
     aggiornaHUDArma();
+    aggiornaHUDLobby();
     creaGunDrawObj();
-    onResize(() => { aggiornaHUDArma(); aggiornaHUDStats(); });
+    onResize(() => { aggiornaHUDArma(); aggiornaHUDStats(); aggiornaHUDLobby(); });
     mostraMenu();
 });
 
@@ -604,7 +592,6 @@ socket.on("state", (state) => {
     }
     if (state.lb) aggiornaLeaderboard(state.lb);
 
-    // Rimuovi disconnessi
     for (const id in players) {
         if (!state.players[id]) {
             if (players[id].labelObj) destroy(players[id].labelObj);
@@ -699,7 +686,6 @@ socket.on("state", (state) => {
         }
     }
 
-    // Proiettili
     const serverIds=new Set(state.proiettili.map(b=>b.id));
     for (const id in bulletSprites) {
         if (!serverIds.has(Number(id))) { destroy(bulletSprites[id]); delete bulletSprites[id]; }
