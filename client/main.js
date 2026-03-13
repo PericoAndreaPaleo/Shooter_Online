@@ -12,7 +12,7 @@ const canvas = document.querySelector("canvas");
 canvas.style.cursor = "crosshair";
 
 // ========================
-// OVERLAY CANVAS (per compatibilità)
+// OVERLAY CANVAS
 // ========================
 const overlayCanvas = document.createElement("canvas");
 overlayCanvas.style.cssText = "position:fixed;top:0;left:0;pointer-events:none;z-index:10;";
@@ -31,14 +31,14 @@ function worldToScreen(wx, wy) {
 }
 
 // ========================
-// ARMA E MANI — Kaboom draw
+// ARMA E MANI
 // ========================
 let gunDrawObj = null;
 function creaGunDrawObj() {
     if (gunDrawObj) destroy(gunDrawObj);
     gunDrawObj = add([pos(0,0), z(1.5), {
         draw() {
-            if (inMenu || !myId) return;
+            if (inMenu || inLobbyScreen || !myId) return;
             for (const id in players) {
                 const p = players[id];
                 if (!p || p.morto || !p.dirIndicator || !p.sprite) continue;
@@ -86,11 +86,13 @@ const socket = io();
 
 let myId = null;
 let myLobbyId = null;
+let myLobbyName = null;
 let mapSize = { width: 5000, height: 5000 };
 let ostacoliSopra = [];
 let cameraInizializzata = false;
 let inMenu = true;
-let myNickname = ""; // assegnato dal server
+let inLobbyScreen = true; // schermata selezione lobby
+let myNickname = "";
 
 const players = {};
 const bulletSprites = {};
@@ -177,20 +179,168 @@ function nascondiElementiHTML() {
     if (htmlContainer) { htmlContainer.remove(); htmlContainer = null; }
 }
 
+// ========================
+// SCHERMATA SELEZIONE LOBBY
+// ========================
+let lobbyListData = [];
+
+function mostraSchermataLobby(errorMsg) {
+    distruggiUI();
+    inMenu = true;
+    inLobbyScreen = true;
+
+    // Sfondo
+    uiLayer.push(add([rect(width(),height()), pos(0,0), color(rgb(5,10,20)), opacity(0.97), fixed(), z(200)]));
+    uiLayer.push(add([text("SHOOTER ONLINE", {size:46}), pos(width()/2, 54), anchor("center"), color(rgb(0,255,100)), fixed(), z(201)]));
+
+    htmlContainer = document.createElement("div");
+    htmlContainer.style.cssText = `
+        position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+        display:flex;flex-direction:column;align-items:center;gap:16px;
+        z-index:9999;width:min(520px,92vw);
+    `;
+
+    // Errore se c'è
+    if (errorMsg) {
+        const errDiv = document.createElement("div");
+        errDiv.textContent = errorMsg;
+        errDiv.style.cssText = "color:#f55;font-size:15px;font-family:monospace;text-align:center;";
+        htmlContainer.appendChild(errDiv);
+    }
+
+    // CREA NUOVA LOBBY
+    const createSection = document.createElement("div");
+    createSection.style.cssText = "display:flex;gap:10px;width:100%;";
+
+    const nameInput = document.createElement("input");
+    nameInput.placeholder = "Nome lobby (opzionale)";
+    nameInput.maxLength = 30;
+    nameInput.style.cssText = `
+        flex:1;padding:12px 14px;background:rgba(255,255,255,0.08);
+        border:2px solid rgba(0,255,100,0.4);border-radius:6px;
+        color:white;font-size:16px;font-family:monospace;outline:none;
+    `;
+
+    const createBtn = document.createElement("button");
+    createBtn.textContent = "+ CREA";
+    createBtn.style.cssText = `
+        padding:12px 20px;background:rgb(0,160,70);color:white;
+        font-size:16px;font-weight:bold;border:none;border-radius:6px;
+        cursor:pointer;font-family:monospace;white-space:nowrap;
+    `;
+    createBtn.addEventListener("click", () => {
+        socket.emit("createLobby", { name: nameInput.value.trim() || "" });
+    });
+
+    createSection.appendChild(nameInput);
+    createSection.appendChild(createBtn);
+    htmlContainer.appendChild(createSection);
+
+    // Separatore
+    const sep = document.createElement("div");
+    sep.style.cssText = "color:rgba(255,255,255,0.3);font-family:monospace;font-size:13px;";
+    sep.textContent = "── oppure entra in una lobby esistente ──";
+    htmlContainer.appendChild(sep);
+
+    // LISTA LOBBY
+    const listContainer = document.createElement("div");
+    listContainer.id = "lobby-list-container";
+    listContainer.style.cssText = "width:100%;display:flex;flex-direction:column;gap:8px;max-height:50vh;overflow-y:auto;";
+    renderLobbyList(listContainer, lobbyListData);
+    htmlContainer.appendChild(listContainer);
+
+    document.body.appendChild(htmlContainer);
+    setTimeout(() => nameInput.focus(), 50);
+}
+
+function renderLobbyList(container, lobbies) {
+    container.innerHTML = "";
+    if (!lobbies || lobbies.length === 0) {
+        const empty = document.createElement("div");
+        empty.textContent = "Nessuna lobby disponibile. Creane una!";
+        empty.style.cssText = "color:rgba(255,255,255,0.4);font-family:monospace;font-size:14px;text-align:center;padding:20px;";
+        container.appendChild(empty);
+        return;
+    }
+
+    for (const l of lobbies) {
+        const isFull = l.players >= l.max;
+        const row = document.createElement("div");
+        row.style.cssText = `
+            display:flex;align-items:center;justify-content:space-between;
+            background:rgba(255,255,255,0.07);border-radius:8px;padding:12px 16px;
+            border:1px solid rgba(255,255,255,${isFull ? "0.1" : "0.2"});
+            opacity:${isFull ? "0.55" : "1"};
+        `;
+
+        const info = document.createElement("div");
+        info.style.cssText = "display:flex;flex-direction:column;gap:3px;";
+
+        const nameEl = document.createElement("span");
+        nameEl.textContent = l.name || l.id;
+        nameEl.style.cssText = "color:white;font-family:monospace;font-size:16px;font-weight:bold;";
+
+        const countEl = document.createElement("span");
+        countEl.textContent = `${l.players}/${l.max} giocatori${isFull ? " — PIENA" : ""}`;
+        countEl.style.cssText = `color:${isFull ? "#f88" : "#8f8"};font-family:monospace;font-size:13px;`;
+
+        info.appendChild(nameEl);
+        info.appendChild(countEl);
+
+        const joinBtn = document.createElement("button");
+        joinBtn.textContent = "ENTRA";
+        joinBtn.disabled = isFull;
+        joinBtn.style.cssText = `
+            padding:10px 20px;background:${isFull ? "rgba(100,100,100,0.5)" : "rgb(0,120,200)"};
+            color:white;font-size:15px;font-weight:bold;border:none;border-radius:6px;
+            cursor:${isFull ? "not-allowed" : "pointer"};font-family:monospace;
+        `;
+        if (!isFull) {
+            joinBtn.addEventListener("click", () => {
+                socket.emit("joinLobby", { lobbyId: l.id });
+            });
+        }
+
+        row.appendChild(info);
+        row.appendChild(joinBtn);
+        container.appendChild(row);
+    }
+}
+
+// Aggiorna la lista lobby in tempo reale senza ricostruire tutto
+socket.on("lobbyList", (list) => {
+    lobbyListData = list;
+    if (inLobbyScreen && htmlContainer) {
+        const container = document.getElementById("lobby-list-container");
+        if (container) renderLobbyList(container, list);
+    }
+});
+
+socket.on("lobbyError", (msg) => {
+    if (inLobbyScreen) mostraSchermataLobby(msg);
+});
+
+// ========================
+// MENU IN-GAME (spawn/morte)
+// ========================
 function mostraMenu(titolo, sottotitolo) {
     distruggiUI();
     inMenu = true;
+    inLobbyScreen = false;
     uiLayer.push(add([rect(width(),height()), pos(0,0), color(rgb(5,10,5)), opacity(0.88), fixed(), z(200)]));
     uiLayer.push(add([text("SHOOTER ONLINE",{size:52}), pos(width()/2,height()/2-140), anchor("center"), color(rgb(0,255,100)), fixed(), z(201)]));
     if (myNickname) {
         uiLayer.push(add([text(myNickname,{size:22}), pos(width()/2,height()/2-70), anchor("center"), color(rgb(0,200,255)), fixed(), z(201)]));
     }
+    if (myLobbyName) {
+        uiLayer.push(add([text(`Lobby: ${myLobbyName}`,{size:16}), pos(width()/2,height()/2-40), anchor("center"), color(rgb(180,180,180)), fixed(), z(201)]));
+    }
     if (sottotitolo) {
-        uiLayer.push(add([text(sottotitolo,{size:26}), pos(width()/2,height()/2-35), anchor("center"), color(rgb(220,80,80)), fixed(), z(201)]));
+        uiLayer.push(add([text(sottotitolo,{size:26}), pos(width()/2,height()/2-8), anchor("center"), color(rgb(220,80,80)), fixed(), z(201)]));
     }
 
     htmlContainer = document.createElement("div");
-    htmlContainer.style.cssText = "position:fixed;left:50%;top:50%;transform:translate(-50%,30px);display:flex;flex-direction:column;align-items:center;gap:12px;z-index:9999;";
+    htmlContainer.style.cssText = "position:fixed;left:50%;top:50%;transform:translate(-50%,60px);display:flex;flex-direction:column;align-items:center;gap:12px;z-index:9999;";
 
     const btn = document.createElement("button");
     btn.textContent = "GIOCA";
@@ -201,7 +351,16 @@ function mostraMenu(titolo, sottotitolo) {
         socket.emit("spawn");
     });
 
+    // Pulsante per tornare alla selezione lobby
+    const backBtn = document.createElement("button");
+    backBtn.textContent = "← Cambia Lobby";
+    backBtn.style.cssText = "width:220px;height:40px;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.7);font-size:15px;border:1px solid rgba(255,255,255,0.2);border-radius:6px;cursor:pointer;font-family:monospace;";
+    backBtn.addEventListener("click", () => {
+        location.reload();
+    });
+
     htmlContainer.appendChild(btn);
+    htmlContainer.appendChild(backBtn);
     document.body.appendChild(htmlContainer);
     setTimeout(() => btn.focus(), 50);
 }
@@ -216,6 +375,7 @@ let hudKillsObj = null;
 let myKills = 0, myDeaths = 0;
 let hudWeaponObj = null;
 let hudLobbyObj = null;
+let hudPlayersObj = null;
 
 function aggiornaHUDArma() {
     if (hudWeaponObj) destroy(hudWeaponObj);
@@ -233,8 +393,12 @@ function aggiornaHUDStats() {
 }
 function aggiornaHUDLobby() {
     if (hudLobbyObj) destroy(hudLobbyObj);
-    if (!myLobbyId) return;
-    hudLobbyObj = add([text(`Lobby: ${myLobbyId}`,{size:11}), pos(14,14), color(rgb(120,120,120)), fixed(), z(100)]);
+    if (!myLobbyName) return;
+    hudLobbyObj = add([text(`Lobby: ${myLobbyName}`,{size:11}), pos(14,14), color(rgb(120,120,120)), fixed(), z(100)]);
+}
+function aggiornaHUDPlayers(count, max) {
+    if (hudPlayersObj) destroy(hudPlayersObj);
+    hudPlayersObj = add([text(`Giocatori: ${count}/${max}`,{size:11}), pos(14,28), color(rgb(100,180,100)), fixed(), z(100)]);
 }
 function mostraKillFeed(msg) {
     killFeedList.unshift({ msg, timer: 3.5 });
@@ -256,7 +420,7 @@ function aggiornaLeaderboard(lb) {
 // ========================
 const keyMap = { a:"left", d:"right", w:"up", s:"down" };
 window.addEventListener("keydown", (e) => {
-    if (inMenu) return;
+    if (inMenu || inLobbyScreen) return;
     const dir = keyMap[e.key.toLowerCase()];
     if (dir && !input[dir]) { input[dir]=true; socket.emit("input",input); }
     if (e.key==="1") { weapon="gun";    socket.emit("setWeapon","gun");    aggiornaHUDArma(); aggiornaWeaponBtns(); }
@@ -264,7 +428,7 @@ window.addEventListener("keydown", (e) => {
     if (e.key==="3") { weapon="fists";  socket.emit("setWeapon","fists");  aggiornaHUDArma(); aggiornaWeaponBtns(); }
 });
 window.addEventListener("keyup", (e) => {
-    if (inMenu) return;
+    if (inMenu || inLobbyScreen) return;
     const dir = keyMap[e.key.toLowerCase()];
     if (dir && input[dir]) { input[dir]=false; socket.emit("input",input); }
 });
@@ -356,7 +520,7 @@ function disegnaJoystick(dx, dy) {
 }
 
 window.addEventListener("touchstart", (e) => {
-    if (inMenu) return;
+    if (inMenu || inLobbyScreen) return;
     for (const t of e.changedTouches) {
         const tx = t.clientX, ty = t.clientY;
         if (tx < window.innerWidth*0.5 && joystickTouchId===null) {
@@ -381,7 +545,7 @@ window.addEventListener("touchstart", (e) => {
 }, { passive:true });
 
 window.addEventListener("touchmove", (e) => {
-    if (inMenu) return;
+    if (inMenu || inLobbyScreen) return;
     for (const t of e.changedTouches) {
         const tx = t.clientX, ty = t.clientY;
         if (t.identifier === joystickTouchId) {
@@ -442,7 +606,7 @@ let lastTouchShot = 0;
 let mouseDown = false;
 
 function shoot() {
-    if (inMenu || !myId || !players[myId] || players[myId].morto) return;
+    if (inMenu || inLobbyScreen || !myId || !players[myId] || players[myId].morto) return;
     if (weapon === "fists") return;
     if (weapon === "pistol") {
         const now = performance.now();
@@ -463,7 +627,7 @@ function shoot() {
 }
 
 function shootTouch() {
-    if (inMenu || !myId || !players[myId] || players[myId].morto) return;
+    if (inMenu || inLobbyScreen || !myId || !players[myId] || players[myId].morto) return;
     if (weapon === "fists") return;
     if (weapon === "pistol") {
         const now = performance.now();
@@ -509,22 +673,23 @@ window.addEventListener("mousedown", (e) => {
 window.addEventListener("mouseup", (e) => { if (e.button!==0) return; mouseDown=false; });
 
 onMouseMove(() => {
-    if (inMenu||!myId||!players[myId]||players[myId].morto) return;
+    if (inMenu || inLobbyScreen || !myId || !players[myId] || players[myId].morto) return;
     const me=players[myId].sprite;
     const mw=toWorld(mousePos());
     socket.emit("aim", Math.atan2(mw.y-me.pos.y, mw.x-me.pos.x));
 });
 
 // ========================
-// INIT
+// INIT — ricevuto dopo joinLobby/createLobby
 // ========================
-socket.on("init", ({ id, map, ostacoli, lobbyId, nickname }) => {
+socket.on("init", ({ id, map, ostacoli, lobbyId, lobbyName, nickname, playerCount, maxPlayers }) => {
     if (!sessionStorage.getItem("reloaded")) {
         sessionStorage.setItem("reloaded","1");
         location.reload();
         return;
     }
-    myId=id; mapSize=map; myLobbyId=lobbyId; myNickname=nickname;
+    myId=id; mapSize=map; myLobbyId=lobbyId; myLobbyName=lobbyName; myNickname=nickname;
+    inLobbyScreen = false;
     ostacoliSopra=ostacoli.filter(o=>o.type==="cespuglio"||o.type==="albero");
 
     const spiaggia=80;
@@ -548,9 +713,25 @@ socket.on("init", ({ id, map, ostacoli, lobbyId, nickname }) => {
     aggiornaHUDStats();
     aggiornaHUDArma();
     aggiornaHUDLobby();
+    aggiornaHUDPlayers(playerCount, maxPlayers);
     creaGunDrawObj();
-    onResize(() => { aggiornaHUDArma(); aggiornaHUDStats(); aggiornaHUDLobby(); });
+    onResize(() => { aggiornaHUDArma(); aggiornaHUDStats(); aggiornaHUDLobby(); aggiornaHUDPlayers(playerCount, maxPlayers); });
     mostraMenu();
+});
+
+// ========================
+// PLAYER LEFT — disconnessione altrui
+// ========================
+socket.on("playerLeft", ({ id, nickname: leftNick }) => {
+    // Rimuovi sprite se esiste ancora
+    if (players[id]) {
+        if (players[id].labelObj) destroy(players[id].labelObj);
+        if (players[id].hpBar) destroy(players[id].hpBar);
+        if (players[id].spriteInner) destroy(players[id].spriteInner);
+        if (players[id].sprite) destroy(players[id].sprite);
+        delete players[id];
+    }
+    mostraKillFeed(`${leftNick} ha lasciato la partita`);
 });
 
 // ========================
@@ -564,7 +745,7 @@ socket.on("killConfirm", ({ victim }) => {
 // onUpdate
 // ========================
 onUpdate(() => {
-    if (inMenu||!myId||!players[myId]) return;
+    if (inMenu || inLobbyScreen || !myId || !players[myId]) return;
     if (!players[myId].morto) camPos(players[myId].sprite.pos.x, players[myId].sprite.pos.y);
     camScale(CAM_ZOOM);
 
@@ -591,6 +772,7 @@ socket.on("state", (state) => {
         camPos(s.pos.x,s.pos.y); camScale(CAM_ZOOM); cameraInizializzata=true;
     }
     if (state.lb) aggiornaLeaderboard(state.lb);
+    if (state.playerCount !== undefined) aggiornaHUDPlayers(state.playerCount, state.maxPlayers);
 
     for (const id in players) {
         if (!state.players[id]) {
@@ -698,5 +880,14 @@ socket.on("state", (state) => {
         }
     }
 });
+
+// ========================
+// AVVIO — mostra subito schermata lobby
+// ========================
+// Aspetta che kaboom sia pronto, poi mostra la lobby
+// (la lista arriva dal socket "lobbyList" in automatico)
+setTimeout(() => {
+    if (inLobbyScreen) mostraSchermataLobby();
+}, 100);
 
 drawOverlay();

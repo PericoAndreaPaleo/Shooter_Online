@@ -33,17 +33,14 @@ function generaMappa() {
     const seed = Math.floor(Math.random() * 999999);
     const rng = seededRandom(seed);
 
-    // Rocce — rCollisione = r (tutta la roccia è solida)
     for (let i = 0; i < 80; i++) {
         const r = 25 + rng() * 35;
         ostacoli.push({ x: rng() * map.width, y: rng() * map.height, r, rCollisione: r, type: "roccia" });
     }
-    // Alberi — rCollisione = solo il tronco (r/3)
     for (let i = 0; i < 60; i++) {
         const r = 35 + rng() * 50;
         ostacoli.push({ x: rng() * map.width, y: rng() * map.height, r, rCollisione: Math.max(10, r / 3), type: "albero" });
     }
-    // Cespugli — non solidi, solo visivi
     for (let i = 0; i < 70; i++) {
         ostacoli.push({ x: rng() * map.width, y: rng() * map.height, r: 20 + rng() * 30, type: "cespuglio" });
     }
@@ -57,36 +54,30 @@ const COOLDOWN_BY_WEAPON = { gun: 120, pistol: 250, fists: 0 };
 const SPEED = 320;
 const SPEED_PROIETTILE = 1300;
 const BULLET_LIFETIME = 0.8;
+const MAX_PLAYERS_PER_LOBBY = 8;
 
 // ========================
 // LOBBY
 // ========================
 const lobbies = {};
 
-function creaLobby(lobbyId) {
+function creaLobby(lobbyId, lobbyName) {
     const ostacoli = generaMappa();
     lobbies[lobbyId] = {
+        id: lobbyId,
+        name: lobbyName || lobbyId,
         players: {},
         proiettili: [],
         ostacoli,
-        // ostacoliSolidi = rocce + alberi (non cespugli) — tutti con rCollisione definito
         ostacoliSolidi: ostacoli.filter(o => o.type !== "cespuglio"),
         leaderboard: {},
         nextBulletId: 0,
         lastTime: Date.now(),
+        createdAt: Date.now(),
     };
-    console.log(`Lobby creata: ${lobbyId}`);
+    console.log(`Lobby creata: ${lobbyId} (${lobbyName})`);
+    broadcastLobbyList();
     return lobbies[lobbyId];
-}
-
-function trovaOCreaLobby() {
-    for (const id in lobbies) {
-        const lobby = lobbies[id];
-        if (Object.keys(lobby.players).length < 8) return id;
-    }
-    const newId = "lobby_" + Date.now();
-    creaLobby(newId);
-    return newId;
 }
 
 function rimuoviLobbySeVuota(lobbyId) {
@@ -95,7 +86,24 @@ function rimuoviLobbySeVuota(lobbyId) {
     if (Object.keys(lobby.players).length === 0) {
         delete lobbies[lobbyId];
         console.log(`Lobby rimossa: ${lobbyId}`);
+        broadcastLobbyList();
     }
+}
+
+// Invia la lista lobby aggiornata a tutti i client in attesa
+function broadcastLobbyList() {
+    const list = getLobbyList();
+    io.emit("lobbyList", list);
+}
+
+function getLobbyList() {
+    return Object.values(lobbies).map(l => ({
+        id: l.id,
+        name: l.name,
+        players: Object.keys(l.players).length,
+        max: MAX_PLAYERS_PER_LOBBY,
+        createdAt: l.createdAt,
+    }));
 }
 
 // ========================
@@ -119,11 +127,9 @@ function spawnPos(lobby) {
 }
 
 function risolviCollisioni(p, ostacoliSolidi) {
-    // Bordi mappa
     p.pos.x = Math.max(PLAYER_RADIUS, Math.min(map.width - PLAYER_RADIUS, p.pos.x));
     p.pos.y = Math.max(PLAYER_RADIUS, Math.min(map.height - PLAYER_RADIUS, p.pos.y));
 
-    // Collisione con ogni ostacolo solido — rCollisione è sempre definito ora
     for (const o of ostacoliSolidi) {
         const dx = p.pos.x - o.x, dy = p.pos.y - o.y;
         const dist = Math.hypot(dx, dy);
@@ -135,12 +141,12 @@ function risolviCollisioni(p, ostacoliSolidi) {
         }
     }
 
-    // Ri-clamp dopo push degli ostacoli
     p.pos.x = Math.max(PLAYER_RADIUS, Math.min(map.width - PLAYER_RADIUS, p.pos.x));
     p.pos.y = Math.max(PLAYER_RADIUS, Math.min(map.height - PLAYER_RADIUS, p.pos.y));
 }
 
 function getLeaderboard(lobby) {
+    // Solo i giocatori ATTUALMENTE connessi (più quelli con kill > 0 per storia sessione)
     return Object.values(lobby.leaderboard)
         .sort((a, b) => b.kills - a.kills)
         .slice(0, 10);
@@ -157,31 +163,52 @@ let playerCounter = 0;
 io.on("connection", socket => {
     console.log("Utente connesso:", socket.id);
 
+    // Manda subito la lista lobby disponibili
+    socket.emit("lobbyList", getLobbyList());
+
     playerCounter++;
     const nickname = `player_${playerCounter}`;
+    socket.nickname = nickname;
+    socket.lobbyId = null; // non ancora in una lobby
 
-    const lobbyId = trovaOCreaLobby();
-    const lobby = lobbies[lobbyId];
-    socket.join(lobbyId);
-    socket.lobbyId = lobbyId;
+    // ========================
+    // SELEZIONE LOBBY
+    // ========================
 
-    lobby.players[socket.id] = {
-        pos: spawnPos(lobby),
-        dir: { x: 0, y: 0 },
-        angle: 0,
-        hp: PLAYER_MAX_HP,
-        morto: true,
-        nickname,
-        lastShot: 0,
-        hitFlash: false,
-        lastHit: 0,
-        weapon: "gun"
-    };
-    lobby.leaderboard[socket.id] = { nickname, kills: 0, deaths: 0 };
+    // Client chiede di creare una nuova lobby
+    socket.on("createLobby", (data) => {
+        if (socket.lobbyId) return; // già in una lobby
+        const lobbyName = (data && typeof data.name === "string" && data.name.trim())
+            ? data.name.trim().slice(0, 30)
+            : `Lobby di ${nickname}`;
+        const lobbyId = "lobby_" + Date.now() + "_" + Math.floor(Math.random() * 999);
+        creaLobby(lobbyId, lobbyName);
+        entraNellaLobby(socket, lobbyId);
+    });
 
-    socket.emit("init", { id: socket.id, map, ostacoli: lobby.ostacoli, lobbyId, nickname });
+    // Client chiede di entrare in una lobby esistente
+    socket.on("joinLobby", (data) => {
+        if (socket.lobbyId) return;
+        const lobbyId = data && data.lobbyId;
+        if (!lobbyId || !lobbies[lobbyId]) {
+            socket.emit("lobbyError", "Lobby non trovata.");
+            return;
+        }
+        const lobby = lobbies[lobbyId];
+        if (Object.keys(lobby.players).length >= MAX_PLAYERS_PER_LOBBY) {
+            socket.emit("lobbyError", "Lobby piena.");
+            return;
+        }
+        entraNellaLobby(socket, lobbyId);
+    });
 
+    // ========================
+    // SPAWN
+    // ========================
     socket.on("spawn", () => {
+        if (!socket.lobbyId) return;
+        const lobby = lobbies[socket.lobbyId];
+        if (!lobby) return;
         const p = lobby.players[socket.id];
         if (!p) return;
         p.pos = spawnPos(lobby);
@@ -191,7 +218,13 @@ io.on("connection", socket => {
         p.angle = 0;
     });
 
+    // ========================
+    // INPUT
+    // ========================
     socket.on("input", (input) => {
+        if (!socket.lobbyId) return;
+        const lobby = lobbies[socket.lobbyId];
+        if (!lobby) return;
         const p = lobby.players[socket.id];
         if (!p || p.morto || typeof input !== "object" || input === null) return;
         p.dir = {
@@ -201,18 +234,27 @@ io.on("connection", socket => {
     });
 
     socket.on("aim", (angle) => {
+        if (!socket.lobbyId) return;
+        const lobby = lobbies[socket.lobbyId];
+        if (!lobby) return;
         const p = lobby.players[socket.id];
         if (!p || p.morto || typeof angle !== "number" || !isFinite(angle)) return;
         p.angle = angle;
     });
 
     socket.on("setWeapon", (w) => {
+        if (!socket.lobbyId) return;
+        const lobby = lobbies[socket.lobbyId];
+        if (!lobby) return;
         const p = lobby.players[socket.id];
         if (!p || (w !== "gun" && w !== "pistol" && w !== "fists")) return;
         p.weapon = w;
     });
 
     socket.on("shoot", (data) => {
+        if (!socket.lobbyId) return;
+        const lobby = lobbies[socket.lobbyId];
+        if (!lobby) return;
         const p = lobby.players[socket.id];
         if (!p || p.morto) return;
         const now = Date.now();
@@ -238,13 +280,68 @@ io.on("connection", socket => {
         });
     });
 
+    // ========================
+    // DISCONNECT — rimozione completa
+    // ========================
     socket.on("disconnect", () => {
         console.log("Utente disconnesso:", socket.id);
+        if (!socket.lobbyId) return;
+        const lobby = lobbies[socket.lobbyId];
+        if (!lobby) return;
+
+        // Rimuove completamente il giocatore da players e leaderboard
         delete lobby.players[socket.id];
         delete lobby.leaderboard[socket.id];
-        rimuoviLobbySeVuota(lobbyId);
+
+        // Rimuovi i proiettili di questo giocatore ancora in volo
+        lobby.proiettili = lobby.proiettili.filter(b => b.owner !== socket.id);
+
+        // Notifica tutti nella lobby che il giocatore è uscito
+        io.to(socket.lobbyId).emit("playerLeft", { id: socket.id, nickname: socket.nickname });
+
+        rimuoviLobbySeVuota(socket.lobbyId);
+        broadcastLobbyList();
     });
 });
+
+// ========================
+// FUNZIONE: entra nella lobby
+// ========================
+function entraNellaLobby(socket, lobbyId) {
+    const lobby = lobbies[lobbyId];
+    socket.join(lobbyId);
+    socket.lobbyId = lobbyId;
+
+    lobby.players[socket.id] = {
+        pos: spawnPos(lobby),
+        dir: { x: 0, y: 0 },
+        angle: 0,
+        hp: PLAYER_MAX_HP,
+        morto: true,
+        nickname: socket.nickname,
+        lastShot: 0,
+        hitFlash: false,
+        lastHit: 0,
+        weapon: "gun"
+    };
+
+    // Aggiunge alla leaderboard solo i giocatori connessi
+    lobby.leaderboard[socket.id] = { nickname: socket.nickname, kills: 0, deaths: 0 };
+
+    socket.emit("init", {
+        id: socket.id,
+        map,
+        ostacoli: lobby.ostacoli,
+        lobbyId,
+        lobbyName: lobby.name,
+        nickname: socket.nickname,
+        playerCount: Object.keys(lobby.players).length,
+        maxPlayers: MAX_PLAYERS_PER_LOBBY,
+    });
+
+    broadcastLobbyList();
+    console.log(`${socket.nickname} entrato in ${lobbyId}`);
+}
 
 // ========================
 // GAME LOOP — fisica 60fps, broadcast 40fps
@@ -291,12 +388,10 @@ setInterval(() => {
             b.pos.x += b.dir.x * SPEED_PROIETTILE * dt;
             b.pos.y += b.dir.y * SPEED_PROIETTILE * dt;
 
-            // Lifetime
             if ((now - b.spawnTime) / 1000 >= BULLET_LIFETIME) {
                 lobby.proiettili.splice(i, 1); continue;
             }
 
-            // Collisione ostacoli — usa rCollisione (ora sempre definito)
             let hitWall = false;
             for (const o of lobby.ostacoliSolidi) {
                 if (Math.hypot(b.pos.x - o.x, b.pos.y - o.y) < o.rCollisione + 4) {
@@ -305,7 +400,6 @@ setInterval(() => {
             }
             if (hitWall) { lobby.proiettili.splice(i, 1); continue; }
 
-            // Collisione giocatori
             let hit = false;
             for (const id in lobby.players) {
                 if (id === b.owner) continue;
@@ -354,7 +448,9 @@ setInterval(() => {
             io.to(lobbyId).emit("state", {
                 players: playersState,
                 proiettili: lobby.proiettili,
-                lb: getLeaderboard(lobby)
+                lb: getLeaderboard(lobby),
+                playerCount: Object.keys(lobby.players).length,
+                maxPlayers: MAX_PLAYERS_PER_LOBBY,
             });
         }
     }
