@@ -17,76 +17,45 @@ const GAME_H = 720;
 function calcolaLetterbox() {
     const scaleX = window.innerWidth  / GAME_W;
     const scaleY = window.innerHeight / GAME_H;
-    const scale  = Math.min(scaleX, scaleY); // letterbox: bande nere se necessario
+    const scale  = Math.min(scaleX, scaleY);
     const left   = Math.round((window.innerWidth  - GAME_W * scale) / 2);
     const top    = Math.round((window.innerHeight - GAME_H * scale) / 2);
     return { scale, left, top };
 }
 
-function applicaLetterbox() {
-    const { scale, left, top } = calcolaLetterbox();
-    const c = document.querySelector("canvas");
-    if (!c) return;
-    c.style.position      = "fixed";
-    c.style.left          = left + "px";
-    c.style.top           = top  + "px";
-    c.style.width         = Math.round(GAME_W * scale) + "px";
-    c.style.height        = Math.round(GAME_H * scale) + "px";
-    c.style.imageRendering = "pixelated";
-}
-
-window.addEventListener("resize", applicaLetterbox);
-
 kaboom({
-    width:  GAME_W,
-    height: GAME_H,
-    clearColor: [0.16, 0.55, 0.82, 1],
+    width:  window.innerWidth,
+    height: window.innerHeight,
+    clearColor: [0, 0, 0, 1],
     preventPauseOnBlur: true,
-    crisp: true,
 });
 
 document.body.style.cursor = "crosshair";
-document.body.style.background = "black"; // bande nere
+document.body.style.background = "black";
 const canvas = document.querySelector("canvas");
 canvas.style.cursor = "crosshair";
-applicaLetterbox(); // applica subito il letterbox
 
 // ========================
 // OVERLAY CANVAS
 // ========================
 const overlayCanvas = document.createElement("canvas");
-overlayCanvas.style.cssText = "position:fixed;pointer-events:none;z-index:10;";
-overlayCanvas.width  = GAME_W;
-overlayCanvas.height = GAME_H;
+overlayCanvas.style.cssText = "position:fixed;top:0;left:0;pointer-events:none;z-index:10;";
+overlayCanvas.width  = window.innerWidth;
+overlayCanvas.height = window.innerHeight;
 document.body.appendChild(overlayCanvas);
 const octx = overlayCanvas.getContext("2d");
-
-function sincronizzaOverlay() {
-    const { scale, left, top } = calcolaLetterbox();
-    overlayCanvas.style.left   = left + "px";
-    overlayCanvas.style.top    = top  + "px";
-    overlayCanvas.style.width  = Math.round(GAME_W * scale) + "px";
-    overlayCanvas.style.height = Math.round(GAME_H * scale) + "px";
-}
-window.addEventListener("resize", sincronizzaOverlay);
-sincronizzaOverlay();
 function drawOverlay() { requestAnimationFrame(drawOverlay); octx.clearRect(0,0,overlayCanvas.width,overlayCanvas.height); }
 
 function worldToScreen(wx, wy) {
     const cam = camPos(), zoom = camScale().x;
-    const { scale, left, top } = calcolaLetterbox();
-    // coordinate nel canvas di gioco (1280×720)
-    const gx = (wx - cam.x) * zoom + GAME_W / 2;
-    const gy = (wy - cam.y) * zoom + GAME_H / 2;
-    // coordinate sullo schermo fisico (con offset letterbox)
-    return { x: gx * scale + left, y: gy * scale + top };
+    return {
+        x: (wx - cam.x) * zoom + window.innerWidth  / 2,
+        y: (wy - cam.y) * zoom + window.innerHeight / 2,
+    };
 }
 
-// Converte coordinate touch (schermo fisico) in coordinate del canvas di gioco
-function screenToGame(sx, sy) {
-    const { scale, left, top } = calcolaLetterbox();
-    return { x: (sx - left) / scale, y: (sy - top) / scale };
-}
+// Coordinate touch in pixel fisici → già corrette perché canvas = schermo intero
+function screenToGame(sx, sy) { return { x: sx, y: sy }; }
 
 // ========================
 // SOCKET PRINCIPALE (selezione lobby)
@@ -96,7 +65,14 @@ const mainSocket = io();
 // ========================
 // STATO GLOBALE
 // ========================
-const CAM_ZOOM = 1; // zoom fisso — la risoluzione 1280×720 è già la finestra di gioco
+// Zoom calcolato in modo che tutti vedano esattamente GAME_W x GAME_H unità di mappa.
+// Le bande nere vengono disegnate dentro Kaboom se lo schermo ha aspect ratio diverso da 16:9.
+function calcolaZoom() {
+    const { scale } = calcolaLetterbox();
+    return scale;
+}
+let CAM_ZOOM = calcolaZoom();
+window.addEventListener("resize", () => { CAM_ZOOM = calcolaZoom(); });
 let socket = null;           // socket namespace della lobby
 let myId = null;
 let myLobbyId = null;
@@ -364,6 +340,7 @@ function connettiALobby(lobbyId, lobbyName, token) {
         }
 
         aggiornaHUDStats(); aggiornaHUDArma(); aggiornaHUDLobby(); aggiornaHUDPlayers(playerCount, maxPlayers);
+        aggiornaBlackBars();
         creaGunDrawObj();
         onResize(() => { aggiornaHUDArma(); aggiornaHUDStats(); aggiornaHUDLobby(); });
         mostraMenu();
@@ -474,6 +451,29 @@ function aggiornaHUDPlayers(count, max) {
     if (hudPlayersObj) destroy(hudPlayersObj);
     hudPlayersObj = add([text(`Giocatori: ${count}/${max}`,{size:11}), pos(14,28), color(rgb(100,180,100)), fixed(), z(100)]);
 }
+
+// Bande nere letterbox disegnate dentro Kaboom (z altissimo, fixed)
+let blackBarsObj = null;
+function aggiornaBlackBars() {
+    if (blackBarsObj) destroy(blackBarsObj);
+    const { scale, left, top } = calcolaLetterbox();
+    const gameW = GAME_W * scale, gameH = GAME_H * scale;
+    const W = window.innerWidth, H = window.innerHeight;
+    blackBarsObj = add([fixed(), z(999), {
+        draw() {
+            const c = rgb(0,0,0);
+            // banda sinistra
+            if (left > 0) drawRect({ pos: vec2(0,0), width: left, height: H, color: c });
+            // banda destra
+            if (left > 0) drawRect({ pos: vec2(left + gameW, 0), width: left + 1, height: H, color: c });
+            // banda sopra
+            if (top > 0) drawRect({ pos: vec2(0,0), width: W, height: top, color: c });
+            // banda sotto
+            if (top > 0) drawRect({ pos: vec2(0, top + gameH), width: W, height: top + 1, color: c });
+        }
+    }]);
+}
+window.addEventListener("resize", aggiornaBlackBars);
 function mostraKillFeed(msg) {
     killFeedList.unshift({ msg, timer: 3.5 });
     if (killFeedList.length > 5) killFeedList.pop();
@@ -593,7 +593,6 @@ function resetAimJoyPos() {
     if (!aimJoyEl) return;
     aimJoyEl.style.right="24px"; aimJoyEl.style.bottom="24px";
     aimJoyEl.style.left="auto"; aimJoyEl.style.top="auto";
-    // centro in coordinate schermo fisico
     aimJoyCenter={x:window.innerWidth-24-JOYSTICK_R-10, y:window.innerHeight-24-JOYSTICK_R-10};
 }
 
