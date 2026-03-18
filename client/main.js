@@ -606,9 +606,7 @@ window.addEventListener("touchmove",e=>{
             if (len>DEAD_ZONE){
                 aimJoyActive=true;
                 aimJoyDir={x:dx/len, y:dy/len};
-                // Manda aim al server in base alla direzione del joystick (non alla posizione sullo schermo)
-                const angle=Math.atan2(dy,dx);
-                if(socket) socket.emit("aim",angle);
+                aimJoyAngle=Math.atan2(dy,dx); // salva angolo, verrà inviato nel fireLoop
                 disegnaJoy(aimJoyEl,dx,dy,"rgba(255,80,80,0.95)");
             } else {
                 aimJoyActive=false;
@@ -651,6 +649,7 @@ window.addEventListener("touchcancel",e=>{
 // ========================
 const PISTOL_COOLDOWN_MS=250, AUTO_FIRE_MS=120;
 let lastPistolShot=0, lastAssaltoShot=0, mouseDown=false;
+let aimJoyAngle=0; // angolo corrente del joystick mira, aggiornato in touchmove
 
 // Sparo desktop (mouse)
 function shoot() {
@@ -681,12 +680,15 @@ function fireLoop(){
     const n=performance.now();
     // Desktop: autofire assalto, singolo pistola
     if(mouseDown&&weapon==="gun"&&n-lastAssaltoShot>=AUTO_FIRE_MS){shoot();lastAssaltoShot=n;}
-    // Touch: joystick mira attivo → autofire con cooldown dell'arma
-    if(aimJoyActive&&weapon!=="fists"){
-        const cooldown=weapon==="gun"?AUTO_FIRE_MS:PISTOL_COOLDOWN_MS;
-        if(n-lastPistolShot>=cooldown){
-            shootTouchJoy();
-            lastPistolShot=n;
+    // Touch: joystick mira attivo → invia aim ogni frame + autofire
+    if(aimJoyActive){
+        if(socket) socket.emit("aim", aimJoyAngle); // mantiene la visuale bloccata
+        if(weapon!=="fists"){
+            const cooldown=weapon==="gun"?AUTO_FIRE_MS:PISTOL_COOLDOWN_MS;
+            if(n-lastPistolShot>=cooldown){
+                shootTouchJoy();
+                lastPistolShot=n;
+            }
         }
     }
     requestAnimationFrame(fireLoop);
