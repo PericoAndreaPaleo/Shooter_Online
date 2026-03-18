@@ -1,5 +1,13 @@
 import kaboom from "./lib/kaboom.mjs";
 
+// ========================
+// RICARICA AUTOMATICA — deve avvenire subito, prima della lobby
+// ========================
+if (!sessionStorage.getItem("reloaded")) {
+    sessionStorage.setItem("reloaded", "1");
+    location.reload();
+}
+
 kaboom({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -683,11 +691,6 @@ onMouseMove(() => {
 // INIT — ricevuto dopo joinLobby/createLobby
 // ========================
 socket.on("init", ({ id, map, ostacoli, lobbyId, lobbyName, nickname, playerCount, maxPlayers }) => {
-    if (!sessionStorage.getItem("reloaded")) {
-        sessionStorage.setItem("reloaded","1");
-        location.reload();
-        return;
-    }
     myId=id; mapSize=map; myLobbyId=lobbyId; myLobbyName=lobbyName; myNickname=nickname;
     inLobbyScreen = false;
     ostacoliSopra=ostacoli.filter(o=>o.type==="cespuglio"||o.type==="albero");
