@@ -547,9 +547,12 @@ function disegnaJoy(el, dx, dy, coloreKnob) {
     ctx.beginPath(); ctx.arc(cx,cy,JOYSTICK_R,0,Math.PI*2);
     ctx.fillStyle="rgba(0,0,0,0.35)"; ctx.fill();
     ctx.strokeStyle="rgba(255,255,255,0.4)"; ctx.lineWidth=2.5; ctx.stroke();
-    const kx=cx+Math.max(-JOYSTICK_R+KNOB_R,Math.min(JOYSTICK_R-KNOB_R,dx));
-    const ky=cy+Math.max(-JOYSTICK_R+KNOB_R,Math.min(JOYSTICK_R-KNOB_R,dy));
-    ctx.beginPath(); ctx.arc(kx,ky,KNOB_R,0,Math.PI*2);
+    // Clamp circolare: il knob non esce mai dal cerchio
+    const maxDist = JOYSTICK_R - KNOB_R;
+    const dist = Math.hypot(dx, dy);
+    const clampedDx = dist > maxDist ? (dx/dist)*maxDist : dx;
+    const clampedDy = dist > maxDist ? (dy/dist)*maxDist : dy;
+    ctx.beginPath(); ctx.arc(cx+clampedDx, cy+clampedDy, KNOB_R, 0, Math.PI*2);
     ctx.fillStyle=coloreKnob||"rgba(255,255,255,0.7)"; ctx.fill();
     ctx.strokeStyle="rgba(255,255,255,0.9)"; ctx.lineWidth=2; ctx.stroke();
 }
@@ -602,7 +605,6 @@ window.addEventListener("touchstart",e=>{
         const tx=t.clientX, ty=t.clientY;
         const metà=window.innerWidth*0.5;
 
-        // Lato sinistro → joystick movimento
         if (tx<metà && moveJoyTouchId===null){
             moveJoyTouchId=t.identifier;
             moveJoyCenter={x:tx,y:ty};
@@ -613,7 +615,6 @@ window.addEventListener("touchstart",e=>{
             }
             disegnaJoy(moveJoyEl,0,0,"rgba(255,255,255,0.7)");
         }
-        // Lato destro → joystick mira
         else if (tx>=metà && aimJoyTouchId===null){
             aimJoyTouchId=t.identifier;
             aimJoyCenter={x:tx,y:ty};
@@ -623,7 +624,7 @@ window.addEventListener("touchstart",e=>{
                 aimJoyEl.style.top=(ty-JOYSTICK_R-10)+"px";
                 aimJoyEl.style.bottom="auto";
             }
-            aimJoyActive=false; // attiva solo quando si sposta oltre la dead zone
+            aimJoyActive=false;
             aimJoyDir={x:0,y:0};
             disegnaJoy(aimJoyEl,0,0,"rgba(255,100,100,0.8)");
         }
