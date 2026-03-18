@@ -451,11 +451,18 @@ window.addEventListener("keyup", e => {
 });
 
 // ========================
-// TOUCH UI
+// TOUCH UI — doppio joystick
 // ========================
 const JOYSTICK_R=70, KNOB_R=28, DEAD_ZONE=15;
-let joystickEl=null, weaponBtns=[], joystickTouchId=null, joystickCenter={x:0,y:0};
-let aimTouchId=null, aimTouchPos={x:0,y:0}, touchFiring=false;
+
+// Joystick sinistro (movimento)
+let moveJoyEl=null, moveJoyTouchId=null, moveJoyCenter={x:0,y:0};
+// Joystick destro (mira + sparo)
+let aimJoyEl=null,  aimJoyTouchId=null,  aimJoyCenter={x:0,y:0};
+let aimJoyDir={x:0,y:0};   // direzione normalizzata corrente del joystick mira
+let aimJoyActive=false;     // joystick destro premuto → sparo attivo
+
+let weaponBtns=[];
 
 function aggiornaWeaponBtns() {
     weaponBtns.forEach(b => {
@@ -464,81 +471,167 @@ function aggiornaWeaponBtns() {
         b.style.transform   = a?"scale(1.12)":"scale(1)";
     });
 }
+
+function creaCanvasJoystick(lato) {
+    const el = document.createElement("canvas");
+    el.width  = (JOYSTICK_R+10)*2;
+    el.height = (JOYSTICK_R+10)*2;
+    const base = JOYSTICK_R+10;
+    const bottom = window.innerHeight - 24 - base;
+    if (lato==="left") {
+        el.style.cssText=`position:fixed;left:24px;bottom:24px;pointer-events:none;z-index:500;opacity:0.8;`;
+    } else {
+        el.style.cssText=`position:fixed;right:24px;bottom:24px;pointer-events:none;z-index:500;opacity:0.8;`;
+    }
+    document.body.appendChild(el);
+    return el;
+}
+
+function disegnaJoy(el, dx, dy, coloreKnob) {
+    if (!el) return;
+    const ctx=el.getContext("2d"), cx=JOYSTICK_R+10, cy=JOYSTICK_R+10;
+    ctx.clearRect(0,0,el.width,el.height);
+    ctx.beginPath(); ctx.arc(cx,cy,JOYSTICK_R,0,Math.PI*2);
+    ctx.fillStyle="rgba(0,0,0,0.35)"; ctx.fill();
+    ctx.strokeStyle="rgba(255,255,255,0.4)"; ctx.lineWidth=2.5; ctx.stroke();
+    const kx=cx+Math.max(-JOYSTICK_R+KNOB_R,Math.min(JOYSTICK_R-KNOB_R,dx));
+    const ky=cy+Math.max(-JOYSTICK_R+KNOB_R,Math.min(JOYSTICK_R-KNOB_R,dy));
+    ctx.beginPath(); ctx.arc(kx,ky,KNOB_R,0,Math.PI*2);
+    ctx.fillStyle=coloreKnob||"rgba(255,255,255,0.7)"; ctx.fill();
+    ctx.strokeStyle="rgba(255,255,255,0.9)"; ctx.lineWidth=2; ctx.stroke();
+}
+
 function creaTouchUI() {
-    if (!isMobile()||joystickEl) return;
-    joystickEl=document.createElement("canvas");
-    joystickEl.width=(JOYSTICK_R+10)*2; joystickEl.height=(JOYSTICK_R+10)*2;
-    joystickEl.style.cssText="position:fixed;left:24px;bottom:24px;pointer-events:none;z-index:500;opacity:0.8;";
-    document.body.appendChild(joystickEl);
-    joystickCenter={x:24+JOYSTICK_R+10,y:window.innerHeight-24-JOYSTICK_R-10};
-    disegnaJoystick(0,0);
+    if (!isMobile()||moveJoyEl) return;
+
+    // Joystick movimento (sinistra)
+    moveJoyEl = creaCanvasJoystick("left");
+    moveJoyCenter = { x:24+JOYSTICK_R+10, y:window.innerHeight-24-JOYSTICK_R-10 };
+    disegnaJoy(moveJoyEl, 0, 0, "rgba(255,255,255,0.7)");
+
+    // Joystick mira (destra) — knob rosso per distinguerlo
+    aimJoyEl = creaCanvasJoystick("right");
+    aimJoyCenter = { x:window.innerWidth-24-JOYSTICK_R-10, y:window.innerHeight-24-JOYSTICK_R-10 };
+    disegnaJoy(aimJoyEl, 0, 0, "rgba(255,100,100,0.8)");
+
+    // Bottoni arma — centrati in alto rispetto ai joystick
     if (!weaponBtns.length) {
         [{key:"gun",label:"AR",color:"#e55"},{key:"pistol",label:"PI",color:"#e93"},{key:"fists",label:"PU",color:"#59e"}].forEach((w,i)=>{
             const btn=document.createElement("button");
             btn.textContent=w.label; btn.dataset.weapon=w.key;
-            const bSize=56,gap=10,totalW=3*bSize+2*gap;
+            const bSize=52,gap=8,totalW=3*bSize+2*gap;
             const lp=Math.round(window.innerWidth/2-totalW/2)+i*(bSize+gap);
-            btn.style.cssText=`position:fixed;left:${lp}px;bottom:24px;width:56px;height:56px;background:${w.color};color:white;font-size:16px;font-weight:bold;border:3px solid rgba(255,255,255,0.3);border-radius:10px;cursor:pointer;z-index:600;opacity:0.9;font-family:monospace;`;
+            btn.style.cssText=`position:fixed;left:${lp}px;bottom:${24+(JOYSTICK_R+10)*2+8}px;width:${bSize}px;height:${bSize}px;background:${w.color};color:white;font-size:15px;font-weight:bold;border:3px solid rgba(255,255,255,0.3);border-radius:10px;cursor:pointer;z-index:600;opacity:0.9;font-family:monospace;`;
             btn.addEventListener("touchstart",e=>{e.stopPropagation();weapon=w.key;socket.emit("setWeapon",w.key);aggiornaHUDArma();aggiornaWeaponBtns();},{passive:true});
             document.body.appendChild(btn); weaponBtns.push(btn);
         });
     }
     aggiornaWeaponBtns();
 }
+
 function rimuoviTouchUI() {
-    if (joystickEl){joystickEl.remove();joystickEl=null;}
+    if (moveJoyEl){moveJoyEl.remove();moveJoyEl=null;}
+    if (aimJoyEl){aimJoyEl.remove();aimJoyEl=null;}
     weaponBtns.forEach(b=>b.remove()); weaponBtns=[];
-    joystickTouchId=null; aimTouchId=null; touchFiring=false;
+    moveJoyTouchId=null; aimJoyTouchId=null; aimJoyActive=false; aimJoyDir={x:0,y:0};
 }
-function disegnaJoystick(dx,dy) {
-    if (!joystickEl) return;
-    const ctx=joystickEl.getContext("2d"),cx=JOYSTICK_R+10,cy=JOYSTICK_R+10;
-    ctx.clearRect(0,0,joystickEl.width,joystickEl.height);
-    ctx.beginPath();ctx.arc(cx,cy,JOYSTICK_R,0,Math.PI*2);ctx.fillStyle="rgba(0,0,0,0.35)";ctx.fill();
-    ctx.strokeStyle="rgba(255,255,255,0.5)";ctx.lineWidth=2.5;ctx.stroke();
-    const kx=cx+Math.max(-JOYSTICK_R+KNOB_R,Math.min(JOYSTICK_R-KNOB_R,dx));
-    const ky=cy+Math.max(-JOYSTICK_R+KNOB_R,Math.min(JOYSTICK_R-KNOB_R,dy));
-    ctx.beginPath();ctx.arc(kx,ky,KNOB_R,0,Math.PI*2);ctx.fillStyle="rgba(255,255,255,0.7)";ctx.fill();
-    ctx.strokeStyle="rgba(255,255,255,0.9)";ctx.lineWidth=2;ctx.stroke();
+
+// Posizionamento joystick di mira (angolo fisso in basso a destra)
+function resetAimJoyPos() {
+    if (!aimJoyEl) return;
+    aimJoyEl.style.right="24px"; aimJoyEl.style.bottom="24px";
+    aimJoyEl.style.left="auto"; aimJoyEl.style.top="auto";
+    aimJoyCenter={x:window.innerWidth-24-JOYSTICK_R-10, y:window.innerHeight-24-JOYSTICK_R-10};
 }
+
 window.addEventListener("touchstart",e=>{
     if (inMenu||inLobbyScreen) return;
     for (const t of e.changedTouches){
-        const tx=t.clientX,ty=t.clientY;
-        if (tx<window.innerWidth*0.5&&joystickTouchId===null){
-            joystickTouchId=t.identifier;joystickCenter={x:tx,y:ty};
-            if(joystickEl){joystickEl.style.left=(tx-JOYSTICK_R-10)+"px";joystickEl.style.top=(ty-JOYSTICK_R-10)+"px";joystickEl.style.bottom="auto";}
-            disegnaJoystick(0,0);
-        } else if(tx>=window.innerWidth*0.5&&aimTouchId===null){
-            aimTouchId=t.identifier;aimTouchPos={x:tx,y:ty};touchFiring=true;
-            if(myId&&players[myId]&&players[myId].sprite){const sp=worldToScreen(players[myId].sprite.pos.x,players[myId].sprite.pos.y);socket.emit("aim",Math.atan2(ty-sp.y,tx-sp.x));}
+        const tx=t.clientX, ty=t.clientY;
+        const metà=window.innerWidth*0.5;
+
+        // Lato sinistro → joystick movimento
+        if (tx<metà && moveJoyTouchId===null){
+            moveJoyTouchId=t.identifier;
+            moveJoyCenter={x:tx,y:ty};
+            if(moveJoyEl){
+                moveJoyEl.style.left=(tx-JOYSTICK_R-10)+"px";
+                moveJoyEl.style.top=(ty-JOYSTICK_R-10)+"px";
+                moveJoyEl.style.bottom="auto";
+            }
+            disegnaJoy(moveJoyEl,0,0,"rgba(255,255,255,0.7)");
+        }
+        // Lato destro → joystick mira
+        else if (tx>=metà && aimJoyTouchId===null){
+            aimJoyTouchId=t.identifier;
+            aimJoyCenter={x:tx,y:ty};
+            if(aimJoyEl){
+                aimJoyEl.style.right="auto";
+                aimJoyEl.style.left=(tx-JOYSTICK_R-10)+"px";
+                aimJoyEl.style.top=(ty-JOYSTICK_R-10)+"px";
+                aimJoyEl.style.bottom="auto";
+            }
+            aimJoyActive=false; // attiva solo quando si sposta oltre la dead zone
+            aimJoyDir={x:0,y:0};
+            disegnaJoy(aimJoyEl,0,0,"rgba(255,100,100,0.8)");
         }
     }
 },{passive:true});
+
 window.addEventListener("touchmove",e=>{
     if (inMenu||inLobbyScreen) return;
     for (const t of e.changedTouches){
-        if(t.identifier===joystickTouchId){
-            const dx=t.clientX-joystickCenter.x,dy=t.clientY-joystickCenter.y;
+        const tx=t.clientX, ty=t.clientY;
+
+        if (t.identifier===moveJoyTouchId){
+            const dx=tx-moveJoyCenter.x, dy=ty-moveJoyCenter.y;
             const ni={left:dx<-DEAD_ZONE,right:dx>DEAD_ZONE,up:dy<-DEAD_ZONE,down:dy>DEAD_ZONE};
             if(JSON.stringify(ni)!==JSON.stringify(input)){Object.assign(input,ni);socket.emit("input",input);}
-            disegnaJoystick(dx,dy);
-        } else if(t.identifier===aimTouchId){
-            aimTouchPos={x:t.clientX,y:t.clientY};
-            if(myId&&players[myId]&&players[myId].sprite){const sp=worldToScreen(players[myId].sprite.pos.x,players[myId].sprite.pos.y);socket.emit("aim",Math.atan2(t.clientY-sp.y,t.clientX-sp.x));}
+            disegnaJoy(moveJoyEl,dx,dy,"rgba(255,255,255,0.7)");
+        }
+        else if (t.identifier===aimJoyTouchId){
+            const dx=tx-aimJoyCenter.x, dy=ty-aimJoyCenter.y;
+            const len=Math.hypot(dx,dy);
+            if (len>DEAD_ZONE){
+                aimJoyActive=true;
+                aimJoyDir={x:dx/len, y:dy/len};
+                // Manda aim al server in base alla direzione del joystick (non alla posizione sullo schermo)
+                const angle=Math.atan2(dy,dx);
+                if(socket) socket.emit("aim",angle);
+                disegnaJoy(aimJoyEl,dx,dy,"rgba(255,80,80,0.95)");
+            } else {
+                aimJoyActive=false;
+                aimJoyDir={x:0,y:0};
+                disegnaJoy(aimJoyEl,0,0,"rgba(255,100,100,0.8)");
+            }
         }
     }
 },{passive:true});
+
+function rilasciaAimJoy() {
+    aimJoyTouchId=null; aimJoyActive=false; aimJoyDir={x:0,y:0};
+    resetAimJoyPos();
+    disegnaJoy(aimJoyEl,0,0,"rgba(255,100,100,0.8)");
+}
+function rilasciaMovJoy() {
+    moveJoyTouchId=null;
+    Object.assign(input,{left:false,right:false,up:false,down:false});
+    socket.emit("input",input);
+    if(moveJoyEl){moveJoyEl.style.left="24px";moveJoyEl.style.top="auto";moveJoyEl.style.bottom="24px";}
+    moveJoyCenter={x:24+JOYSTICK_R+10,y:window.innerHeight-24-JOYSTICK_R-10};
+    disegnaJoy(moveJoyEl,0,0,"rgba(255,255,255,0.7)");
+}
+
 window.addEventListener("touchend",e=>{
     for (const t of e.changedTouches){
-        if(t.identifier===joystickTouchId){joystickTouchId=null;Object.assign(input,{left:false,right:false,up:false,down:false});socket.emit("input",input);if(joystickEl){joystickEl.style.left="24px";joystickEl.style.top="auto";joystickEl.style.bottom="24px";}joystickCenter={x:24+JOYSTICK_R+10,y:window.innerHeight-24-JOYSTICK_R-10};disegnaJoystick(0,0);}
-        if(t.identifier===aimTouchId){aimTouchId=null;touchFiring=false;}
+        if(t.identifier===moveJoyTouchId) rilasciaMovJoy();
+        if(t.identifier===aimJoyTouchId)  rilasciaAimJoy();
     }
 },{passive:true});
 window.addEventListener("touchcancel",e=>{
     for (const t of e.changedTouches){
-        if(t.identifier===joystickTouchId){joystickTouchId=null;Object.assign(input,{left:false,right:false,up:false,down:false});socket.emit("input",input);disegnaJoystick(0,0);}
-        if(t.identifier===aimTouchId){aimTouchId=null;touchFiring=false;}
+        if(t.identifier===moveJoyTouchId) rilasciaMovJoy();
+        if(t.identifier===aimJoyTouchId)  rilasciaAimJoy();
     }
 },{passive:true});
 
@@ -546,8 +639,9 @@ window.addEventListener("touchcancel",e=>{
 // SPARO
 // ========================
 const PISTOL_COOLDOWN_MS=250, AUTO_FIRE_MS=120;
-let lastPistolShot=0, lastAssaltoShot=0, lastTouchShot=0, mouseDown=false;
+let lastPistolShot=0, lastAssaltoShot=0, mouseDown=false;
 
+// Sparo desktop (mouse)
 function shoot() {
     if (inMenu||inLobbyScreen||!socket||!myId||!players[myId]||players[myId].morto||weapon==="fists") return;
     if (weapon==="pistol"){const n=performance.now();if(n-lastPistolShot<PISTOL_COOLDOWN_MS)return;lastPistolShot=n;}
@@ -560,22 +654,30 @@ function shoot() {
     socket.emit("shoot",{dir,tipOffset:{x:nx*tipDist,y:ny*tipDist}});
     playShootSound();
 }
-function shootTouch() {
-    if (inMenu||inLobbyScreen||!socket||!myId||!players[myId]||players[myId].morto||weapon==="fists") return;
-    if (weapon==="pistol"){const n=performance.now();if(n-lastPistolShot<PISTOL_COOLDOWN_MS)return;lastPistolShot=n;}
-    const me=players[myId].sprite, sp=worldToScreen(me.pos.x,me.pos.y);
-    const dx=aimTouchPos.x-sp.x,dy=aimTouchPos.y-sp.y;
-    const len=Math.hypot(dx,dy); if(!len) return;
-    const nx=dx/len,ny=dy/len,angle=Math.atan2(dy,dx);
+
+// Sparo touch — usa la direzione del joystick destro
+function shootTouchJoy() {
+    if (inMenu||inLobbyScreen||!socket||!myId||!players[myId]||players[myId].morto) return;
+    if (weapon==="fists"||!aimJoyActive) return;
+    const nx=aimJoyDir.x, ny=aimJoyDir.y;
+    if (!nx&&!ny) return;
     const tipDist=24+(weapon==="pistol"?10:40);
-    socket.emit("aim",angle);
     socket.emit("shoot",{dir:{x:nx,y:ny},tipOffset:{x:nx*tipDist,y:ny*tipDist}});
     playShootSound();
 }
+
 function fireLoop(){
     const n=performance.now();
+    // Desktop: autofire assalto, singolo pistola
     if(mouseDown&&weapon==="gun"&&n-lastAssaltoShot>=AUTO_FIRE_MS){shoot();lastAssaltoShot=n;}
-    if(touchFiring){const c=weapon==="gun"?AUTO_FIRE_MS:PISTOL_COOLDOWN_MS;if(weapon!=="fists"&&n-lastTouchShot>=c){shootTouch();lastTouchShot=n;}}
+    // Touch: joystick mira attivo → autofire con cooldown dell'arma
+    if(aimJoyActive&&weapon!=="fists"){
+        const cooldown=weapon==="gun"?AUTO_FIRE_MS:PISTOL_COOLDOWN_MS;
+        if(n-lastPistolShot>=cooldown){
+            shootTouchJoy();
+            lastPistolShot=n;
+        }
+    }
     requestAnimationFrame(fireLoop);
 }
 requestAnimationFrame(fireLoop);
