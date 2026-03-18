@@ -43,7 +43,18 @@ const mainSocket = io();
 // ========================
 // STATO GLOBALE
 // ========================
-const CAM_ZOOM = 1;
+// Porzione di mappa visibile di riferimento (in unità di gioco).
+// Tutti i dispositivi vedranno circa questa area, indipendentemente dalla risoluzione fisica.
+const VISTA_W = 1400; // unità orizzontali di mappa visibili
+const VISTA_H = 900;  // unità verticali di mappa visibili
+
+function calcolaZoom() {
+    // Scegli lo zoom che fa entrare entrambe le dimensioni di riferimento nello schermo.
+    // min() → letterbox (nessuna parte di mappa viene tagliata oltre la finestra di riferimento).
+    return Math.min(window.innerWidth / VISTA_W, window.innerHeight / VISTA_H);
+}
+let CAM_ZOOM = calcolaZoom();
+window.addEventListener("resize", () => { CAM_ZOOM = calcolaZoom(); });
 let socket = null;           // socket namespace della lobby
 let myId = null;
 let myLobbyId = null;
