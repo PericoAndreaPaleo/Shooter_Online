@@ -738,6 +738,7 @@ requestAnimationFrame(fireLoop);
 window.addEventListener("mousedown",e=>{if(e.button!==0)return;mouseDown=true;shoot();lastAssaltoShot=performance.now();});
 window.addEventListener("mouseup",e=>{if(e.button!==0)return;mouseDown=false;});
 onMouseMove(()=>{
+    if(isMobile())return; // su mobile l'aim è gestito dal joystick destro
     if(inMenu||inLobbyScreen||!socket||!myId||!players[myId]||players[myId].morto)return;
     const me=players[myId].sprite,mw=toWorld(mousePos());
     socket.emit("aim",Math.atan2(mw.y-me.pos.y,mw.x-me.pos.x));
