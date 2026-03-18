@@ -184,77 +184,86 @@ function mostraSchermataLobby(errorMsg) {
     distruggiUI();
     inMenu = true; inLobbyScreen = true;
     uiLayer.push(add([rect(width(),height()), pos(0,0), color(rgb(5,10,20)), opacity(0.97), fixed(), z(200)]));
-    uiLayer.push(add([text("SHOOTER ONLINE",{size:46}), pos(width()/2,54), anchor("center"), color(rgb(0,255,100)), fixed(), z(201)]));
+    uiLayer.push(add([text("SHOOTER ONLINE",{size:hs(46)}), pos(hx(GAME_W/2),hy(54)), anchor("center"), color(rgb(0,255,100)), fixed(), z(201)]));
+
+    // scala base per font e padding — relativa alla larghezza schermo
+    const S = Math.min(window.innerWidth, window.innerHeight*16/9) / 520;
+    const fs = (n) => `${Math.max(10, Math.round(n*S))}px`;
 
     htmlContainer = document.createElement("div");
     htmlContainer.style.cssText = `position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
-        display:flex;flex-direction:column;align-items:center;gap:16px;z-index:9999;width:min(520px,92vw);`;
+        display:flex;flex-direction:column;align-items:center;gap:${Math.round(10*S)}px;
+        z-index:9999;width:min(520px,92vw);`;
 
     if (errorMsg) {
         const e = document.createElement("div");
         e.textContent = errorMsg;
-        e.style.cssText = "color:#f55;font-size:15px;font-family:monospace;text-align:center;";
+        e.style.cssText = `color:#f55;font-size:${fs(15)};font-family:monospace;text-align:center;`;
         htmlContainer.appendChild(e);
     }
 
-    // Crea lobby
     const row = document.createElement("div");
-    row.style.cssText = "display:flex;gap:10px;width:100%;";
+    row.style.cssText = `display:flex;gap:${Math.round(8*S)}px;width:100%;`;
     const nameInput = document.createElement("input");
     nameInput.placeholder = "Nome lobby (opzionale)";
     nameInput.maxLength = 30;
-    nameInput.style.cssText = `flex:1;padding:12px 14px;background:rgba(255,255,255,0.08);
-        border:2px solid rgba(0,255,100,0.4);border-radius:6px;color:white;font-size:16px;font-family:monospace;outline:none;`;
+    nameInput.style.cssText = `flex:1;padding:${Math.round(10*S)}px ${Math.round(12*S)}px;
+        background:rgba(255,255,255,0.08);border:2px solid rgba(0,255,100,0.4);
+        border-radius:6px;color:white;font-size:${fs(16)};font-family:monospace;outline:none;`;
     const createBtn = document.createElement("button");
     createBtn.textContent = "+ CREA";
-    createBtn.style.cssText = `padding:12px 20px;background:rgb(0,160,70);color:white;font-size:16px;
-        font-weight:bold;border:none;border-radius:6px;cursor:pointer;font-family:monospace;white-space:nowrap;`;
+    createBtn.style.cssText = `padding:${Math.round(10*S)}px ${Math.round(16*S)}px;
+        background:rgb(0,160,70);color:white;font-size:${fs(16)};font-weight:bold;
+        border:none;border-radius:6px;cursor:pointer;font-family:monospace;white-space:nowrap;`;
     createBtn.addEventListener("click", () => mainSocket.emit("createLobby", { name: nameInput.value.trim() }));
     row.appendChild(nameInput); row.appendChild(createBtn);
     htmlContainer.appendChild(row);
 
     const sep = document.createElement("div");
     sep.textContent = "── oppure entra in una lobby esistente ──";
-    sep.style.cssText = "color:rgba(255,255,255,0.3);font-family:monospace;font-size:13px;";
+    sep.style.cssText = `color:rgba(255,255,255,0.3);font-family:monospace;font-size:${fs(13)};`;
     htmlContainer.appendChild(sep);
 
     const listEl = document.createElement("div");
     listEl.id = "lobby-list";
-    listEl.style.cssText = "width:100%;display:flex;flex-direction:column;gap:8px;max-height:50vh;overflow-y:auto;";
-    renderLobbyList(listEl, lobbyListData);
+    listEl.style.cssText = `width:100%;display:flex;flex-direction:column;gap:${Math.round(6*S)}px;max-height:50vh;overflow-y:auto;`;
+    renderLobbyList(listEl, lobbyListData, S);
     htmlContainer.appendChild(listEl);
 
     document.body.appendChild(htmlContainer);
     setTimeout(() => nameInput.focus(), 50);
 }
 
-function renderLobbyList(container, list) {
+function renderLobbyList(container, list, S=1) {
+    const fs = (n) => `${Math.max(10, Math.round(n*S))}px`;
     container.innerHTML = "";
     if (!list || !list.length) {
         const e = document.createElement("div");
         e.textContent = "Nessuna lobby disponibile. Creane una!";
-        e.style.cssText = "color:rgba(255,255,255,0.4);font-family:monospace;font-size:14px;text-align:center;padding:20px;";
+        e.style.cssText = `color:rgba(255,255,255,0.4);font-family:monospace;font-size:${fs(14)};text-align:center;padding:${Math.round(16*S)}px;`;
         container.appendChild(e); return;
     }
     for (const l of list) {
         const full = l.players >= l.max;
         const row = document.createElement("div");
         row.style.cssText = `display:flex;align-items:center;justify-content:space-between;
-            background:rgba(255,255,255,0.07);border-radius:8px;padding:12px 16px;
+            background:rgba(255,255,255,0.07);border-radius:8px;
+            padding:${Math.round(10*S)}px ${Math.round(14*S)}px;
             border:1px solid rgba(255,255,255,${full?"0.1":"0.2"});opacity:${full?"0.55":"1"};`;
         const info = document.createElement("div");
         info.style.cssText = "display:flex;flex-direction:column;gap:3px;";
         const nameEl = document.createElement("span");
         nameEl.textContent = l.name || l.id;
-        nameEl.style.cssText = "color:white;font-family:monospace;font-size:16px;font-weight:bold;";
+        nameEl.style.cssText = `color:white;font-family:monospace;font-size:${fs(16)};font-weight:bold;`;
         const countEl = document.createElement("span");
         countEl.textContent = `${l.players}/${l.max} giocatori${full?" — PIENA":""}`;
-        countEl.style.cssText = `color:${full?"#f88":"#8f8"};font-family:monospace;font-size:13px;`;
+        countEl.style.cssText = `color:${full?"#f88":"#8f8"};font-family:monospace;font-size:${fs(13)};`;
         info.appendChild(nameEl); info.appendChild(countEl);
         const btn = document.createElement("button");
         btn.textContent = "ENTRA"; btn.disabled = full;
-        btn.style.cssText = `padding:10px 20px;background:${full?"rgba(100,100,100,0.5)":"rgb(0,120,200)"};
-            color:white;font-size:15px;font-weight:bold;border:none;border-radius:6px;
+        btn.style.cssText = `padding:${Math.round(8*S)}px ${Math.round(16*S)}px;
+            background:${full?"rgba(100,100,100,0.5)":"rgb(0,120,200)"};
+            color:white;font-size:${fs(15)};font-weight:bold;border:none;border-radius:6px;
             cursor:${full?"not-allowed":"pointer"};font-family:monospace;`;
         if (!full) btn.addEventListener("click", () => mainSocket.emit("joinLobby", { lobbyId: l.id }));
         row.appendChild(info); row.appendChild(btn);
@@ -267,7 +276,8 @@ mainSocket.on("lobbyList", (list) => {
     lobbyListData = list;
     if (inLobbyScreen && htmlContainer) {
         const el = document.getElementById("lobby-list");
-        if (el) renderLobbyList(el, list);
+        const S = Math.min(window.innerWidth, window.innerHeight*16/9) / 520;
+        if (el) renderLobbyList(el, list, S);
     }
 });
 
@@ -575,14 +585,17 @@ function creaTouchUI() {
     aimJoyCenter = { x:window.innerWidth-24-JOYSTICK_R-10, y:window.innerHeight-24-JOYSTICK_R-10 };
     disegnaJoy(aimJoyEl, 0, 0, "rgba(255,100,100,0.8)");
 
-    // Bottoni arma — centrati in alto rispetto ai joystick
+    // Bottoni arma — piccoli, centrati, sopra la barra vita
     if (!weaponBtns.length) {
         [{key:"gun",label:"AR",color:"#e55"},{key:"pistol",label:"PI",color:"#e93"},{key:"fists",label:"PU",color:"#59e"}].forEach((w,i)=>{
             const btn=document.createElement("button");
             btn.textContent=w.label; btn.dataset.weapon=w.key;
-            const bSize=52,gap=8,totalW=3*bSize+2*gap;
+            // 1/4 di 52 = 13, ma usiamo 14 come minimo leggibile
+            const bSize=14, gap=6, totalW=3*bSize+2*gap;
             const lp=Math.round(window.innerWidth/2-totalW/2)+i*(bSize+gap);
-            btn.style.cssText=`position:fixed;left:${lp}px;bottom:${24+(JOYSTICK_R+10)*2+8}px;width:${bSize}px;height:${bSize}px;background:${w.color};color:white;font-size:15px;font-weight:bold;border:3px solid rgba(255,255,255,0.3);border-radius:10px;cursor:pointer;z-index:600;opacity:0.9;font-family:monospace;`;
+            // sopra la barra vita: la barra è a hy(GAME_H-44), mettiamo i bottoni ~30px sopra
+            const bottomPx = window.innerHeight - hy(GAME_H-44) + hs(20) + bSize + 4;
+            btn.style.cssText=`position:fixed;left:${lp}px;bottom:${bottomPx}px;width:${bSize}px;height:${bSize}px;background:${w.color};color:white;font-size:7px;font-weight:bold;border:1px solid rgba(255,255,255,0.3);border-radius:3px;cursor:pointer;z-index:600;opacity:0.9;font-family:monospace;padding:0;line-height:${bSize}px;text-align:center;`;
             btn.addEventListener("touchstart", e=>{ e.preventDefault(); e.stopPropagation(); }, {passive:false});
             btn.addEventListener("touchend",   e=>{ e.preventDefault(); e.stopPropagation(); weapon=w.key; socket.emit("setWeapon",w.key); aggiornaHUDArma(); aggiornaWeaponBtns(); }, {passive:false});
             document.body.appendChild(btn); weaponBtns.push(btn);
