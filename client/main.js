@@ -435,21 +435,26 @@ let killFeedObjs = [], leaderboardObjs = [];
 let hudKillsObj=null, hudWeaponObj=null, hudLobbyObj=null, hudPlayersObj=null;
 let myKills=0, myDeaths=0;
 
+// Helper: converte coordinate 1280×720 → coordinate canvas reali (con letterbox)
+function hx(x) { const {scale,left} = calcolaLetterbox(); return left + x * scale; }
+function hy(y) { const {scale,top}  = calcolaLetterbox(); return top  + y * scale; }
+function hs(s) { const {scale}      = calcolaLetterbox(); return Math.round(s * scale); }
+
 function aggiornaHUDArma() {
     if (hudWeaponObj) destroy(hudWeaponObj); if (isMobile()) return;
-    hudWeaponObj = add([text(weapon==="gun"?"[1] Assalto  2: Pistola  3: Pugni":weapon==="pistol"?"1: Assalto  [2] Pistola  3: Pugni":"1: Assalto  2: Pistola  [3] Pugni",{size:14}), pos(14,height()-52), color(rgb(255,220,80)), fixed(), z(100)]);
+    hudWeaponObj = add([text(weapon==="gun"?"[1] Assalto  2: Pistola  3: Pugni":weapon==="pistol"?"1: Assalto  [2] Pistola  3: Pugni":"1: Assalto  2: Pistola  [3] Pugni",{size:hs(14)}), pos(hx(14),hy(GAME_H-52)), color(rgb(255,220,80)), fixed(), z(100)]);
 }
 function aggiornaHUDStats() {
     if (hudKillsObj) destroy(hudKillsObj);
-    hudKillsObj = add([text(`K: ${myKills}  M: ${myDeaths}`,{size:16}), pos(14,height()-30), color(rgb(0,255,100)), fixed(), z(100)]);
+    hudKillsObj = add([text(`K: ${myKills}  M: ${myDeaths}`,{size:hs(16)}), pos(hx(14),hy(GAME_H-30)), color(rgb(0,255,100)), fixed(), z(100)]);
 }
 function aggiornaHUDLobby() {
     if (hudLobbyObj) destroy(hudLobbyObj); if (!myLobbyName) return;
-    hudLobbyObj = add([text(`Lobby: ${myLobbyName}`,{size:11}), pos(14,14), color(rgb(120,120,120)), fixed(), z(100)]);
+    hudLobbyObj = add([text(`Lobby: ${myLobbyName}`,{size:hs(11)}), pos(hx(14),hy(14)), color(rgb(120,120,120)), fixed(), z(100)]);
 }
 function aggiornaHUDPlayers(count, max) {
     if (hudPlayersObj) destroy(hudPlayersObj);
-    hudPlayersObj = add([text(`Giocatori: ${count}/${max}`,{size:11}), pos(14,28), color(rgb(100,180,100)), fixed(), z(100)]);
+    hudPlayersObj = add([text(`Giocatori: ${count}/${max}`,{size:hs(11)}), pos(hx(14),hy(28)), color(rgb(100,180,100)), fixed(), z(100)]);
 }
 
 // Bande nere letterbox disegnate dentro Kaboom (z altissimo, fixed)
@@ -481,8 +486,8 @@ function mostraKillFeed(msg) {
 function aggiornaLeaderboard(lb) {
     for (const o of leaderboardObjs) destroy(o); leaderboardObjs = [];
     if (!lb || !lb.length) return;
-    leaderboardObjs.push(add([text("CLASSIFICA",{size:14}), pos(width()-160,14), color(rgb(255,220,0)), fixed(), z(100)]));
-    lb.forEach((e,i) => leaderboardObjs.push(add([text(`${i+1}. ${e.nickname}  ${e.kills}K`,{size:13}), pos(width()-160,34+i*18), color(i===0?rgb(255,220,0):rgb(200,200,200)), fixed(), z(100)])));
+    leaderboardObjs.push(add([text("CLASSIFICA",{size:hs(14)}), pos(hx(GAME_W-160),hy(14)), color(rgb(255,220,0)), fixed(), z(100)]));
+    lb.forEach((e,i) => leaderboardObjs.push(add([text(`${i+1}. ${e.nickname}  ${e.kills}K`,{size:hs(13)}), pos(hx(GAME_W-160),hy(34+i*18)), color(i===0?rgb(255,220,0):rgb(200,200,200)), fixed(), z(100)])));
 }
 
 // ========================
@@ -578,7 +583,8 @@ function creaTouchUI() {
             const bSize=52,gap=8,totalW=3*bSize+2*gap;
             const lp=Math.round(window.innerWidth/2-totalW/2)+i*(bSize+gap);
             btn.style.cssText=`position:fixed;left:${lp}px;bottom:${24+(JOYSTICK_R+10)*2+8}px;width:${bSize}px;height:${bSize}px;background:${w.color};color:white;font-size:15px;font-weight:bold;border:3px solid rgba(255,255,255,0.3);border-radius:10px;cursor:pointer;z-index:600;opacity:0.9;font-family:monospace;`;
-            btn.addEventListener("touchstart",e=>{e.stopPropagation();weapon=w.key;socket.emit("setWeapon",w.key);aggiornaHUDArma();aggiornaWeaponBtns();},{passive:true});
+            btn.addEventListener("touchstart", e=>{ e.preventDefault(); e.stopPropagation(); }, {passive:false});
+            btn.addEventListener("touchend",   e=>{ e.preventDefault(); e.stopPropagation(); weapon=w.key; socket.emit("setWeapon",w.key); aggiornaHUDArma(); aggiornaWeaponBtns(); }, {passive:false});
             document.body.appendChild(btn); weaponBtns.push(btn);
         });
     }
@@ -756,7 +762,7 @@ onUpdate(()=>{
     for(let i=killFeedList.length-1;i>=0;i--){
         killFeedList[i].timer-=dt();
         if(killFeedList[i].timer<=0){killFeedList.splice(i,1);continue;}
-        killFeedObjs.push(add([text(killFeedList[i].msg,{size:15}),pos(width()/2,height()-60-(killFeedList.length-1-i)*22),anchor("center"),color(rgb(255,220,80)),opacity(Math.min(1,killFeedList[i].timer)),fixed(),z(100)]));
+        killFeedObjs.push(add([text(killFeedList[i].msg,{size:hs(15)}),pos(hx(GAME_W/2),hy(GAME_H-60-(killFeedList.length-1-i)*22)),anchor("center"),color(rgb(255,220,80)),opacity(Math.min(1,killFeedList[i].timer)),fixed(),z(100)]));
     }
 });
 
@@ -788,9 +794,9 @@ function aggiornaStato(state) {
         if(!players[id]){
             if(s.morto)continue;
             const sprite=add([pos(s.pos.x,s.pos.y),anchor("center"),circle(24),color(rgb(222,196,145)),outline(4,rgb(0,0,0)),z(1)]);
-            const labelObj=isMe?add([pos(s.pos.x,s.pos.y+41),anchor("center"),text(myNickname||"TU",{size:13}),color(rgb(0,220,255)),z(-1)]):null;
+            const labelObj=isMe?add([pos(s.pos.x,s.pos.y-40),anchor("center"),text(myNickname||"TU",{size:13}),color(rgb(0,220,255)),z(5)]):null;
             const hpBar=isMe?add([fixed(),z(200),{_disp:s.hp,draw(){
-                const bx=width()/2-150,by=height()-44,r=4,W=300,H=20;
+                const bx=hx(GAME_W/2-150),by=hy(GAME_H-44),r=4,W=hs(300),H=hs(20);
                 drawRect({pos:vec2(bx-2,by-2),width:W+4,height:H+4,radius:r+1,color:rgb(30,30,30)});
                 drawRect({pos:vec2(bx,by),width:W,height:H,radius:r,color:rgb(90,90,90)});
                 const t=this._disp/100,c=t>0.5?rgb(Math.round((1-t)*2*220),220,0):rgb(220,Math.round(t*2*220),0);
@@ -807,7 +813,7 @@ function aggiornaStato(state) {
                     distruggiUI();inMenu=false;cameraInizializzata=false;prevInput="";
                     canvas.dispatchEvent(new MouseEvent("mousemove",{bubbles:true,clientX:window.innerWidth/2,clientY:window.innerHeight/2}));
                     p.hpBar=add([fixed(),z(200),{_disp:s.hp,draw(){
-                        const bx=width()/2-150,by=height()-47,r=4,W=300,H=20;
+                        const bx=hx(GAME_W/2-150),by=hy(GAME_H-44),r=4,W=hs(300),H=hs(20);
                         drawRect({pos:vec2(bx-2,by-2),width:W+4,height:H+4,radius:r+1,color:rgb(30,30,30)});
                         drawRect({pos:vec2(bx,by),width:W,height:H,radius:r,color:rgb(90,90,90)});
                         const t=this._disp/100,c=t>0.5?rgb(Math.round((1-t)*2*220),220,0):rgb(220,Math.round(t*2*220),0);
