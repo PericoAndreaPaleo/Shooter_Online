@@ -8,31 +8,84 @@ if (!sessionStorage.getItem("reloaded")) {
     location.reload();
 }
 
+// ========================
+// RISOLUZIONE FISSA (letterbox 16:9)
+// ========================
+const GAME_W = 1280;
+const GAME_H = 720;
+
+function calcolaLetterbox() {
+    const scaleX = window.innerWidth  / GAME_W;
+    const scaleY = window.innerHeight / GAME_H;
+    const scale  = Math.min(scaleX, scaleY); // letterbox: bande nere se necessario
+    const left   = Math.round((window.innerWidth  - GAME_W * scale) / 2);
+    const top    = Math.round((window.innerHeight - GAME_H * scale) / 2);
+    return { scale, left, top };
+}
+
+function applicaLetterbox() {
+    const { scale, left, top } = calcolaLetterbox();
+    const c = document.querySelector("canvas");
+    if (!c) return;
+    c.style.position      = "fixed";
+    c.style.left          = left + "px";
+    c.style.top           = top  + "px";
+    c.style.width         = Math.round(GAME_W * scale) + "px";
+    c.style.height        = Math.round(GAME_H * scale) + "px";
+    c.style.imageRendering = "pixelated";
+}
+
+window.addEventListener("resize", applicaLetterbox);
+
 kaboom({
-    width: window.innerWidth,
-    height: window.innerHeight,
+    width:  GAME_W,
+    height: GAME_H,
     clearColor: [0.16, 0.55, 0.82, 1],
     preventPauseOnBlur: true,
+    crisp: true,
 });
 
 document.body.style.cursor = "crosshair";
+document.body.style.background = "black"; // bande nere
 const canvas = document.querySelector("canvas");
 canvas.style.cursor = "crosshair";
+applicaLetterbox(); // applica subito il letterbox
 
 // ========================
 // OVERLAY CANVAS
 // ========================
 const overlayCanvas = document.createElement("canvas");
-overlayCanvas.style.cssText = "position:fixed;top:0;left:0;pointer-events:none;z-index:10;";
-overlayCanvas.width  = window.innerWidth;
-overlayCanvas.height = window.innerHeight;
+overlayCanvas.style.cssText = "position:fixed;pointer-events:none;z-index:10;";
+overlayCanvas.width  = GAME_W;
+overlayCanvas.height = GAME_H;
 document.body.appendChild(overlayCanvas);
 const octx = overlayCanvas.getContext("2d");
+
+function sincronizzaOverlay() {
+    const { scale, left, top } = calcolaLetterbox();
+    overlayCanvas.style.left   = left + "px";
+    overlayCanvas.style.top    = top  + "px";
+    overlayCanvas.style.width  = Math.round(GAME_W * scale) + "px";
+    overlayCanvas.style.height = Math.round(GAME_H * scale) + "px";
+}
+window.addEventListener("resize", sincronizzaOverlay);
+sincronizzaOverlay();
 function drawOverlay() { requestAnimationFrame(drawOverlay); octx.clearRect(0,0,overlayCanvas.width,overlayCanvas.height); }
 
 function worldToScreen(wx, wy) {
     const cam = camPos(), zoom = camScale().x;
-    return { x:(wx-cam.x)*zoom+window.innerWidth/2, y:(wy-cam.y)*zoom+window.innerHeight/2 };
+    const { scale, left, top } = calcolaLetterbox();
+    // coordinate nel canvas di gioco (1280×720)
+    const gx = (wx - cam.x) * zoom + GAME_W / 2;
+    const gy = (wy - cam.y) * zoom + GAME_H / 2;
+    // coordinate sullo schermo fisico (con offset letterbox)
+    return { x: gx * scale + left, y: gy * scale + top };
+}
+
+// Converte coordinate touch (schermo fisico) in coordinate del canvas di gioco
+function screenToGame(sx, sy) {
+    const { scale, left, top } = calcolaLetterbox();
+    return { x: (sx - left) / scale, y: (sy - top) / scale };
 }
 
 // ========================
@@ -43,18 +96,7 @@ const mainSocket = io();
 // ========================
 // STATO GLOBALE
 // ========================
-// Porzione di mappa visibile di riferimento (in unità di gioco).
-// Tutti i dispositivi vedranno circa questa area, indipendentemente dalla risoluzione fisica.
-const VISTA_W = 1400; // unità orizzontali di mappa visibili
-const VISTA_H = 900;  // unità verticali di mappa visibili
-
-function calcolaZoom() {
-    // Scegli lo zoom che fa entrare entrambe le dimensioni di riferimento nello schermo.
-    // min() → letterbox (nessuna parte di mappa viene tagliata oltre la finestra di riferimento).
-    return Math.min(window.innerWidth / VISTA_W, window.innerHeight / VISTA_H);
-}
-let CAM_ZOOM = calcolaZoom();
-window.addEventListener("resize", () => { CAM_ZOOM = calcolaZoom(); });
+const CAM_ZOOM = 1; // zoom fisso — la risoluzione 1280×720 è già la finestra di gioco
 let socket = null;           // socket namespace della lobby
 let myId = null;
 let myLobbyId = null;
@@ -547,11 +589,11 @@ function rimuoviTouchUI() {
     moveJoyTouchId=null; aimJoyTouchId=null; aimJoyActive=false; aimJoyDir={x:0,y:0};
 }
 
-// Posizionamento joystick di mira (angolo fisso in basso a destra)
 function resetAimJoyPos() {
     if (!aimJoyEl) return;
     aimJoyEl.style.right="24px"; aimJoyEl.style.bottom="24px";
     aimJoyEl.style.left="auto"; aimJoyEl.style.top="auto";
+    // centro in coordinate schermo fisico
     aimJoyCenter={x:window.innerWidth-24-JOYSTICK_R-10, y:window.innerHeight-24-JOYSTICK_R-10};
 }
 
