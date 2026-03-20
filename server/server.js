@@ -26,6 +26,7 @@ const PLAYER_MAX_HP = 100;
 const DAMAGE_BY_WEAPON = { gun: 20, pistol: 15, fists: 0 };
 const COOLDOWN_BY_WEAPON = { gun: 120, pistol: 250, fists: 0 };
 const MAX_AMMO = { gun: 30, pistol: 15, fists: 0 };
+const RELOAD_TIME = { gun: 2500, pistol: 1500 };
 const SPEED = 300;
 const SPEED_PROIETTILE = 1500;
 const BULLET_LIFETIME = 1.2;
@@ -231,13 +232,29 @@ function creaLobby(lobbyId, lobbyName, password) {
             p.weapon = w;
         });
 
+        socket.on("reload", () => {
+            const p = lobby.players[socket.id];
+            if (!p || p.morto || p.weapon === "fists") return;
+            if (!p.ammo) p.ammo = { gun: MAX_AMMO.gun, pistol: MAX_AMMO.pistol };
+            if (p.ammo[p.weapon] >= MAX_AMMO[p.weapon]) return;
+            if (p.reloading) return;
+            p.reloading = true;
+            socket.emit("reloadStart", { weapon: p.weapon, duration: RELOAD_TIME[p.weapon] });
+            setTimeout(() => {
+                if (!p || !lobby.players[socket.id]) return;
+                p.ammo[p.weapon] = MAX_AMMO[p.weapon];
+                p.reloading = false;
+                socket.emit("reloadDone", { weapon: p.weapon });
+            }, RELOAD_TIME[p.weapon]);
+        });
+
         socket.on("shoot", (data) => {
             const p = lobby.players[socket.id];
             if (!p || p.morto || !data || typeof data.dir !== "object") return;
             if (p.weapon === "fists") return;
-            // Controlla munizioni
             if (!p.ammo) p.ammo = { gun: MAX_AMMO.gun, pistol: MAX_AMMO.pistol };
             if (p.ammo[p.weapon] <= 0) return;
+            if (p.reloading) return;
             const now = Date.now();
             if (now - p.lastShot < (COOLDOWN_BY_WEAPON[p.weapon] ?? 120)) return;
             p.lastShot = now;
@@ -449,5 +466,6 @@ setInterval(() => {
     }
 }, 1000 / 60);
 
-server.listen(process.env.PORT || 4000, () =>
-    console.log("Server avviato sulla porta", process.env.PORT || 4000));
+server.listen(process.env.PORT || 4000, () => {
+    console.log("Server avviato sulla porta", process.env.PORT || 4000);
+});

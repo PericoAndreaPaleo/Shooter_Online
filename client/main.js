@@ -205,7 +205,7 @@ function mostraSchermataLobby(errorMsg) {
     const row = document.createElement("div");
     row.style.cssText = `display:flex;gap:${Math.round(8*S)}px;width:100%;`;
     const nameInput = document.createElement("input");
-    nameInput.placeholder = "Nome lobby (opzionale)";
+    nameInput.placeholder = "Lobby name (optional)";
     nameInput.maxLength = 30;
     nameInput.style.cssText = `flex:1;padding:${Math.round(10*S)}px ${Math.round(12*S)}px;
         background:rgba(255,255,255,0.08);border:2px solid rgba(0,255,100,0.4);
@@ -228,7 +228,7 @@ function mostraSchermataLobby(errorMsg) {
     privCheck.type = "checkbox";
     privCheck.style.cssText = "width:16px;height:16px;cursor:pointer;accent-color:#e93;";
     privLabel.appendChild(privCheck);
-    privLabel.appendChild(document.createTextNode("🔒 Privata"));
+    privLabel.appendChild(document.createTextNode("🔒 Private"));
 
     const pwdInput = document.createElement("input");
     pwdInput.type = "password";
@@ -257,7 +257,7 @@ function mostraSchermataLobby(errorMsg) {
     });
 
     const sep = document.createElement("div");
-    sep.textContent = "── oppure entra in una lobby esistente ──";
+    sep.textContent = "── or join an existing lobby ──";
     sep.style.cssText = `color:rgba(255,255,255,0.3);font-family:monospace;font-size:${fs(13)};`;
     htmlContainer.appendChild(sep);
 
@@ -276,7 +276,7 @@ function renderLobbyList(container, list, S=1) {
     container.innerHTML = "";
     if (!list || !list.length) {
         const e = document.createElement("div");
-        e.textContent = "Nessuna lobby disponibile. Creane una!";
+        e.textContent = "No lobbies available. Create one!";
         e.style.cssText = `color:rgba(255,255,255,0.4);font-family:monospace;font-size:${fs(14)};text-align:center;padding:${Math.round(16*S)}px;`;
         container.appendChild(e); return;
     }
@@ -299,7 +299,7 @@ function renderLobbyList(container, list, S=1) {
         nameEl.textContent = (l.private ? "🔒 " : "") + (l.name || l.id);
         nameEl.style.cssText = `color:${l.private?"#ffa":"white"};font-family:monospace;font-size:${fs(16)};font-weight:bold;`;
         const countEl = document.createElement("span");
-        countEl.textContent = `${l.players}/${l.max} giocatori${full?" — PIENA":""}`;
+        countEl.textContent = `${l.players}/${l.max} players${full?" — FULL":""}`;
         countEl.style.cssText = `color:${full?"#f88":"#8f8"};font-family:monospace;font-size:${fs(13)};`;
         info.appendChild(nameEl); info.appendChild(countEl);
 
@@ -319,7 +319,7 @@ function renderLobbyList(container, list, S=1) {
             pwdRow.style.cssText = "display:none;flex;gap:6px;align-items:center;";
             const pwdInput = document.createElement("input");
             pwdInput.type = "password";
-            pwdInput.placeholder = "Inserisci password...";
+            pwdInput.placeholder = "Enter password...";
             pwdInput.style.cssText = `flex:1;padding:7px 10px;background:rgba(255,255,255,0.08);
                 border:2px solid rgba(255,150,0,0.5);border-radius:6px;color:white;
                 font-size:${fs(14)};font-family:monospace;outline:none;`;
@@ -392,7 +392,7 @@ function connettiALobby(lobbyId, lobbyName, token) {
         localStorage.removeItem("lobbyId");
         localStorage.removeItem("lobbyName");
         localStorage.removeItem("lobbyToken");
-        mostraSchermataLobby("Lobby piena.");
+        mostraSchermataLobby("Lobby full.");
     });
 
     socket.on("init", (data) => {
@@ -440,11 +440,25 @@ function connettiALobby(lobbyId, lobbyName, token) {
             if (players[id].sprite)   destroy(players[id].sprite);
             delete players[id];
         }
-        mostraKillFeed(`${n} ha lasciato la partita`);
+        mostraKillFeed(`${n} left the game`);
     });
 
     socket.on("killConfirm", ({ victim }) => {
-        myKills++; aggiornaHUDStats(); mostraKillFeed(`Hai eliminato ${victim}!`); playKillSound();
+        myKills++; aggiornaHUDStats(); mostraKillFeed(`You eliminated ${victim}!`); playKillSound();
+    });
+
+    socket.on("reloadStart", ({ weapon: w, duration }) => {
+        isReloading = true;
+        reloadStartTime = Date.now();
+        reloadDuration  = duration;
+        aggiornaHUDAmmo();
+    });
+
+    socket.on("reloadDone", ({ weapon: w }) => {
+        isReloading = false;
+        reloadStartTime = 0;
+        reloadDuration  = 0;
+        aggiornaHUDAmmo();
     });
 
     socket.on("state", (state) => aggiornaStato(state));
@@ -504,14 +518,14 @@ function mostraMenu(sottotitolo) {
         align-items:center;gap:${gap}px;z-index:9999;`;
 
     const btn = document.createElement("button");
-    btn.textContent = "GIOCA";
+    btn.textContent = "PLAY";
     btn.style.cssText = `width:${bW}px;height:${bH}px;background:rgb(0,180,70);color:white;
         font-size:${Math.round(30*sc)}px;font-weight:bold;border:none;border-radius:6px;
         cursor:pointer;font-family:monospace;letter-spacing:2px;`;
     btn.addEventListener("click", () => { nascondiElementiHTML(); distruggiUI(); socket.emit("spawn"); });
 
     const backBtn = document.createElement("button");
-    backBtn.textContent = "← Cambia Lobby";
+    backBtn.textContent = "← Change Lobby";
     backBtn.style.cssText = `width:${bW}px;height:${bH2}px;background:rgba(255,255,255,0.1);
         color:rgba(255,255,255,0.7);font-size:${Math.round(15*sc)}px;
         border:1px solid rgba(255,255,255,0.2);border-radius:6px;cursor:pointer;font-family:monospace;`;
@@ -534,40 +548,167 @@ function mostraMenu(sottotitolo) {
 // ========================
 const killFeedList = [];
 let killFeedObjs = [], leaderboardObjs = [];
-let hudKillsObj=null, hudWeaponObj=null, hudLobbyObj=null, hudPlayersObj=null, hudAmmoObj=null;
+let hudKillsObj=null, hudWeaponObj=null, hudLobbyObj=null, hudPlayersObj=null, hudAmmoObj=null, hudReloadObj=null;
 let myKills=0, myDeaths=0;
 let myAmmo = { gun: 30, pistol: 15 };
+let isReloading = false;
+let reloadTimer = null;
 
 // Helper: converte coordinate 1280×720 → coordinate canvas reali (con letterbox)
 function hx(x) { const {scale,left} = calcolaLetterbox(); return left + x * scale; }
 function hy(y) { const {scale,top}  = calcolaLetterbox(); return top  + y * scale; }
 function hs(s) { const {scale}      = calcolaLetterbox(); return Math.round(s * scale); }
 
+// Disegna un riquadro arrotondato + testo — tutto in un unico oggetto Kaboom
+function hudBox(testo, px, py, opts={}) {
+    const pad = opts.pad ?? 8;
+    const sz  = opts.size ?? 14;
+    const textCol  = opts.textCol  ?? rgb(255,255,255);
+    const boxCol   = opts.boxCol   ?? rgb(0,0,0);
+    const boxAlpha = opts.boxAlpha ?? 0.55;
+    const radius   = opts.radius   ?? 6;
+    const anchor_  = opts.anchor   ?? "topleft";
+    return add([pos(px,py), fixed(), z(100), {
+        _text: testo, _sz: sz, _pad: pad,
+        _textCol: textCol, _boxCol: boxCol, _boxAlpha: boxAlpha, _r: radius, _anchor: anchor_,
+        draw() {
+            // misura testo approssimativamente (kaboom non ha measureText facile, usiamo stima)
+            const charW = this._sz * 0.6;
+            const tw = this._text.length * charW;
+            const th = this._sz * 1.2;
+            let bx = this.pos.x, by = this.pos.y;
+            if (this._anchor === "right")  bx -= tw + this._pad * 2;
+            if (this._anchor === "center") bx -= tw / 2 + this._pad;
+            // sfondo
+            drawRect({ pos: vec2(bx - this._pad, by - this._pad),
+                width: tw + this._pad*2, height: th + this._pad*2,
+                radius: this._r,
+                color: this._boxCol, opacity: this._boxAlpha });
+            // testo
+            drawText({ text: this._text, pos: vec2(bx, by),
+                size: this._sz, color: this._textCol });
+        }
+    }]);
+}
+
+// Stile unico per tutti i box HUD
+const HUD_BOX   = rgb(0,0,0);
+const HUD_ALPHA = 0.45;
+const HUD_TEXT  = rgb(220,220,220);
+const HUD_TEXT_DIM = rgb(140,140,140);
+const HUD_RADIUS = 4;
+
+// ── Weapon selector (bottom-left, desktop only) ────────────────────────────
 function aggiornaHUDArma() {
-    if (hudWeaponObj) destroy(hudWeaponObj); if (isMobile()) return;
-    hudWeaponObj = add([text(weapon==="gun"?"[1] Assalto  2: Pistola  3: Pugni":weapon==="pistol"?"1: Assalto  [2] Pistola  3: Pugni":"1: Assalto  2: Pistola  [3] Pugni",{size:hs(14)}), pos(hx(14),hy(GAME_H-52)), color(rgb(255,220,80)), fixed(), z(100)]);
+    if (hudWeaponObj) destroy(hudWeaponObj);
+    if (isMobile()) return;
+    const names = { gun:"Rifle", pistol:"Pistol", fists:"Fists" };
+    const keys  = ["gun","pistol","fists"];
+    hudWeaponObj = add([fixed(), z(100), {
+        draw() {
+            const sz = hs(12), pad = hs(6), gap = hs(4);
+            let cx = hx(10);
+            const by = hy(GAME_H - 46);
+            for (const k of keys) {
+                const label = names[k];
+                const tw = label.length * sz * 0.58 + pad*2;
+                const th = sz * 1.5 + pad;
+                const active = k === weapon;
+                // box più opaco se attivo
+                drawRect({ pos: vec2(cx, by), width: tw, height: th,
+                    radius: hs(4), color: rgb(0,0,0), opacity: active ? 0.7 : 0.3 });
+                // bordo sottile in alto se attivo
+                if (active) drawRect({ pos: vec2(cx, by), width: tw, height: hs(2),
+                    color: rgb(220,220,220), opacity: 0.9 });
+                drawText({ text: label, pos: vec2(cx + pad, by + pad*0.6),
+                    size: sz, color: active ? rgb(240,240,240) : rgb(100,100,100) });
+                cx += tw + gap;
+            }
+        }
+    }]);
     aggiornaHUDAmmo();
 }
+
+// ── Ammo (bottom-right) — stile "0 | 30" con sweep di ricarica ────────────
 function aggiornaHUDAmmo() {
     if (hudAmmoObj) destroy(hudAmmoObj);
     if (weapon === "fists") return;
-    const ammo = myAmmo[weapon] ?? 0;
-    const max  = weapon === "gun" ? 30 : 15;
-    const col  = ammo === 0 ? rgb(255,60,60) : ammo <= max*0.3 ? rgb(255,180,0) : rgb(255,255,255);
-    const label = isMobile() ? `${ammo}/${max}` : `${ammo}/${max} munizioni`;
-    hudAmmoObj = add([text(label,{size:hs(16)}), pos(hx(GAME_W-14),hy(GAME_H-30)), anchor("right"), color(col), fixed(), z(100)]);
+    const ammo    = myAmmo[weapon] ?? 0;
+    const maxAmmo = weapon === "gun" ? 30 : 15;
+    hudAmmoObj = add([fixed(), z(100), {
+        draw() {
+            const sz = hs(22), szSub = hs(13), pad = hs(10);
+            const curStr = String(ammo);
+            const maxStr = String(maxAmmo);
+            const sepStr = " | ";
+            const curW  = curStr.length  * sz    * 0.6;
+            const sepW  = sepStr.length  * szSub * 0.6;
+            const maxW  = maxStr.length  * szSub * 0.6;
+            const totalW = curW + sepW + maxW + pad*2;
+            const totalH = sz * 1.4 + pad;
+            const bx = hx(GAME_W - 14) - totalW;
+            const by = hy(GAME_H - 14) - totalH;
+
+            // sfondo
+            drawRect({ pos: vec2(bx, by), width: totalW, height: totalH,
+                radius: hs(4), color: rgb(0,0,0), opacity: 0.5 });
+
+            // sweep di ricarica — striscia luminosa che scorre da sinistra a destra
+            if (isReloading && reloadDuration > 0) {
+                const elapsed = Math.min(Date.now() - reloadStartTime, reloadDuration);
+                const progress = elapsed / reloadDuration;
+                const sweepW = Math.round(totalW * progress);
+                drawRect({ pos: vec2(bx, by), width: sweepW, height: totalH,
+                    radius: hs(4), color: rgb(200,200,200), opacity: 0.18 });
+                // bordo luminoso al fronte dello sweep
+                if (sweepW > 0 && sweepW < totalW) {
+                    drawRect({ pos: vec2(bx + sweepW - hs(2), by), width: hs(2), height: totalH,
+                        color: rgb(255,255,255), opacity: 0.6 });
+                }
+            }
+
+            // testo colpi correnti (grande) | max (piccolo)
+            const col = ammo === 0 ? rgb(200,70,70) : ammo <= maxAmmo*0.3 ? rgb(200,160,60) : rgb(220,220,220);
+            let tx = bx + pad;
+            drawText({ text: curStr, pos: vec2(tx, by + pad*0.5), size: sz, color: col });
+            tx += curW;
+            drawText({ text: sepStr, pos: vec2(tx, by + pad*0.5 + (sz-szSub)*0.5), size: szSub, color: rgb(100,100,100) });
+            tx += sepW;
+            drawText({ text: maxStr, pos: vec2(tx, by + pad*0.5 + (sz-szSub)*0.5), size: szSub, color: rgb(100,100,100) });
+
+            // [R] Reload sotto il box quando vuoto
+            if (ammo === 0 && !isReloading) {
+                const label = "[R] Reload";
+                const lsz = hs(12), lpad = hs(6);
+                const lw = label.length * lsz * 0.58 + lpad*2;
+                const lh = lsz * 1.4 + lpad;
+                const lx = bx + (totalW - lw) / 2;
+                const ly = by - lh - hs(4);
+                drawRect({ pos: vec2(lx, ly), width: lw, height: lh,
+                    radius: hs(4), color: rgb(0,0,0), opacity: 0.6 });
+                drawText({ text: label, pos: vec2(lx + lpad, ly + lpad*0.7),
+                    size: lsz, color: rgb(220,80,80) });
+            }
+        }
+    }]);
 }
+
 function aggiornaHUDStats() {
     if (hudKillsObj) destroy(hudKillsObj);
-    hudKillsObj = add([text(`K: ${myKills}  M: ${myDeaths}`,{size:hs(16)}), pos(hx(14),hy(GAME_H-30)), color(rgb(0,255,100)), fixed(), z(100)]);
+    hudKillsObj = hudBox(`K: ${myKills}  D: ${myDeaths}`, hx(14), hy(GAME_H-30),
+        { size:hs(14), textCol:HUD_TEXT, boxCol:HUD_BOX, boxAlpha:HUD_ALPHA, pad:hs(6), radius:HUD_RADIUS });
 }
+
 function aggiornaHUDLobby() {
     if (hudLobbyObj) destroy(hudLobbyObj); if (!myLobbyName) return;
-    hudLobbyObj = add([text(`Lobby: ${myLobbyName}`,{size:hs(11)}), pos(hx(14),hy(14)), color(rgb(120,120,120)), fixed(), z(100)]);
+    hudLobbyObj = hudBox(`Lobby: ${myLobbyName}`, hx(14), hy(10),
+        { size:hs(11), textCol:HUD_TEXT_DIM, boxCol:HUD_BOX, boxAlpha:0.35, pad:hs(5), radius:HUD_RADIUS });
 }
+
 function aggiornaHUDPlayers(count, max) {
     if (hudPlayersObj) destroy(hudPlayersObj);
-    hudPlayersObj = add([text(`Giocatori: ${count}/${max}`,{size:hs(11)}), pos(hx(14),hy(28)), color(rgb(100,180,100)), fixed(), z(100)]);
+    hudPlayersObj = hudBox(`Players: ${count}/${max}`, hx(14), hy(30),
+        { size:hs(11), textCol:HUD_TEXT_DIM, boxCol:HUD_BOX, boxAlpha:0.35, pad:hs(5), radius:HUD_RADIUS });
 }
 
 // Bande nere letterbox disegnate dentro Kaboom (z altissimo, fixed)
@@ -599,8 +740,35 @@ function mostraKillFeed(msg) {
 function aggiornaLeaderboard(lb) {
     for (const o of leaderboardObjs) destroy(o); leaderboardObjs = [];
     if (!lb || !lb.length) return;
-    leaderboardObjs.push(add([text("CLASSIFICA",{size:hs(14)}), pos(hx(GAME_W-160),hy(14)), color(rgb(255,220,0)), fixed(), z(100)]));
-    lb.forEach((e,i) => leaderboardObjs.push(add([text(`${i+1}. ${e.nickname}  ${e.kills}K`,{size:hs(13)}), pos(hx(GAME_W-160),hy(34+i*18)), color(i===0?rgb(255,220,0):rgb(200,200,200)), fixed(), z(100)])));
+    // Un singolo oggetto che disegna tutto il pannello classifica
+    leaderboardObjs.push(add([fixed(), z(100), {
+        draw() {
+            const sz = hs(12), pad = hs(6), rowH = hs(18), titleSz = hs(11);
+            const panelW = hs(160);
+            const panelH = hs(16) + lb.length * rowH + pad;
+            const bx = hx(GAME_W - 10) - panelW;
+            const by = hy(10);
+            // sfondo pannello unico
+            drawRect({ pos: vec2(bx, by), width: panelW, height: panelH,
+                radius: hs(4), color: rgb(0,0,0), opacity: 0.45 });
+            // titolo
+            drawText({ text: "LEADERBOARD", pos: vec2(bx + pad, by + pad*0.5),
+                size: titleSz, color: rgb(160,160,160) });
+            // righe giocatori
+            lb.forEach((e, i) => {
+                const ry = by + hs(16) + i * rowH;
+                // separatore leggero
+                if (i > 0) drawRect({ pos: vec2(bx + pad, ry), width: panelW - pad*2, height: hs(1),
+                    color: rgb(255,255,255), opacity: 0.06 });
+                const col = i === 0 ? rgb(240,240,240) : rgb(160,160,160);
+                const nameStr = `${i+1}. ${e.nickname}`;
+                const killStr = `${e.kills}K`;
+                drawText({ text: nameStr, pos: vec2(bx + pad, ry + hs(3)), size: sz, color: col });
+                drawText({ text: killStr, pos: vec2(bx + panelW - pad - killStr.length*sz*0.58, ry + hs(3)),
+                    size: sz, color: col });
+            });
+        }
+    }]));
 }
 
 // ========================
@@ -614,6 +782,9 @@ window.addEventListener("keydown", e => {
     if (e.key==="1") { weapon="gun";    socket.emit("setWeapon","gun");    aggiornaHUDArma(); aggiornaWeaponBtns(); aggiornaHUDAmmo(); }
     if (e.key==="2") { weapon="pistol"; socket.emit("setWeapon","pistol"); aggiornaHUDArma(); aggiornaWeaponBtns(); aggiornaHUDAmmo(); }
     if (e.key==="3") { weapon="fists";  socket.emit("setWeapon","fists");  aggiornaHUDArma(); aggiornaWeaponBtns(); aggiornaHUDAmmo(); }
+    if ((e.key==="r"||e.key==="R") && !isReloading && weapon!=="fists") {
+        if (socket) socket.emit("reload");
+    }
 });
 window.addEventListener("keyup", e => {
     if (inMenu || inLobbyScreen) return;
@@ -909,7 +1080,7 @@ function aggiornaStato(state) {
     for(const id in state.players){
         const s=state.players[id], isMe=(id===myId);
         if(isMe&&s.morto&&players[id]&&!players[id].morto&&!inMenu){
-            myDeaths++;aggiornaHUDStats();playDeathSound();mostraMenu("Sei stato eliminato!");
+            myDeaths++;aggiornaHUDStats();playDeathSound();mostraMenu("You were eliminated!");
         }
         if(!players[id]){
             if(s.morto)continue;
@@ -956,22 +1127,8 @@ function aggiornaStato(state) {
     const serverIds=new Set(state.proiettili.map(b=>b.id));
     for(const id in bulletSprites){if(!serverIds.has(Number(id))){destroy(bulletSprites[id]);delete bulletSprites[id];}}
     for(const b of state.proiettili){
-        if(!bulletSprites[b.id]){
-            const hdx = b.dir.x * 10, hdy = b.dir.y * 10; // metà lunghezza = 10 → linea 20px
-            bulletSprites[b.id]=add([pos(b.pos.x,b.pos.y), z(3), {
-                _hdx:hdx, _hdy:hdy,
-                draw(){
-                    drawLine({
-                        p1: vec2(this.pos.x-this._hdx, this.pos.y-this._hdy),
-                        p2: vec2(this.pos.x+this._hdx, this.pos.y+this._hdy),
-                        width: 3,
-                        color: rgb(255,200,0),
-                    });
-                }
-            }]);
-        } else {
-            bulletSprites[b.id].pos=vec2(b.pos.x,b.pos.y);
-        }
+        if(!bulletSprites[b.id]) bulletSprites[b.id]=add([pos(b.pos.x,b.pos.y),anchor("center"),circle(3),color(rgb(255,200,0)),z(3)]);
+        else bulletSprites[b.id].pos=vec2(b.pos.x,b.pos.y);
     }
 }
 
