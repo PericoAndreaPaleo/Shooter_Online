@@ -941,8 +941,29 @@ function aggiornaStato(state) {
     const serverIds=new Set(state.proiettili.map(b=>b.id));
     for(const id in bulletSprites){if(!serverIds.has(Number(id))){destroy(bulletSprites[id]);delete bulletSprites[id];}}
     for(const b of state.proiettili){
-        if(!bulletSprites[b.id]) bulletSprites[b.id]=add([pos(b.pos.x,b.pos.y),anchor("center"),circle(3),color(rgb(255,200,0)),z(0)]);
-        else bulletSprites[b.id].pos=vec2(b.pos.x,b.pos.y);
+        if(!bulletSprites[b.id]){
+            const len   = b.weapon==="pistol" ? 14 : 22;
+            const width = b.weapon==="pistol" ? 2.5 : 3.5;
+            const col   = b.weapon==="pistol" ? rgb(255,230,60) : rgb(255,70,70);
+            const dx = b.dir.x * len / 2;
+            const dy = b.dir.y * len / 2;
+            bulletSprites[b.id] = add([
+                pos(b.pos.x, b.pos.y),
+                z(3),
+                { _dx: dx, _dy: dy, _w: width, _col: col,
+                  draw() {
+                      drawLine({
+                          p1: vec2(this.pos.x - this._dx, this.pos.y - this._dy),
+                          p2: vec2(this.pos.x + this._dx, this.pos.y + this._dy),
+                          width: this._w,
+                          color: this._col,
+                      });
+                  }
+                }
+            ]);
+        } else {
+            bulletSprites[b.id].pos = vec2(b.pos.x, b.pos.y);
+        }
     }
 }
 
