@@ -1022,7 +1022,7 @@ window.addEventListener("touchcancel",e=>{
 // ========================
 // SPARO
 // ========================
-const PISTOL_COOLDOWN_MS=250, AUTO_FIRE_MS=120;
+const PISTOL_COOLDOWN_MS=200, AUTO_FIRE_MS=100;
 let lastPistolShot=0, lastAssaltoShot=0, mouseDown=false;
 let aimJoyAngle=0; // angolo corrente del joystick mira, aggiornato in touchmove
 

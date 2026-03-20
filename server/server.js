@@ -24,10 +24,10 @@ const map = { width: 5000, height: 5000 };
 const PLAYER_RADIUS = 20;
 const PLAYER_MAX_HP = 100;
 const DAMAGE_BY_WEAPON = { gun: 20, pistol: 15, fists: 0 };
-const COOLDOWN_BY_WEAPON = { gun: 120, pistol: 250, fists: 0 };
+const COOLDOWN_BY_WEAPON = { gun: 100, pistol: 200, fists: 0 };
 const MAX_AMMO = { gun: 30, pistol: 15, fists: 0 };
-const RELOAD_TIME = { gun: 2500, pistol: 1500 };
-const SPEED = 300;
+const RELOAD_TIME = { gun: 2000, pistol: 1500 };
+const SPEED = 250;
 const SPEED_PROIETTILE = 1500;
 const BULLET_LIFETIME = 1.2;
 const MAX_PLAYERS = 8;
@@ -343,7 +343,7 @@ io.on("connection", socket => {
         // Nomi unici — controlla solo se il nome è stato specificato
         if (rawName) {
             const exists = Object.values(lobbies).some(l => l.name.toLowerCase() === lobbyName.toLowerCase());
-            if (exists) { socket.emit("lobbyError", `Esiste già una lobby chiamata "${lobbyName}".`); return; }
+            if (exists) { socket.emit("lobbyError", `A lobby named "${lobbyName}".`); return; }
         }
 
         const lobbyId = crypto.randomBytes(4).toString("hex");
@@ -354,13 +354,13 @@ io.on("connection", socket => {
     socket.on("joinLobby", (data) => {
         const lobbyId  = data && data.lobbyId;
         const password = data && data.password;
-        if (!lobbyId || !lobbies[lobbyId]) { socket.emit("lobbyError", "Lobby non trovata."); return; }
+        if (!lobbyId || !lobbies[lobbyId]) { socket.emit("lobbyError", "Lobby not found."); return; }
         const lobby = lobbies[lobbyId];
-        if (Object.keys(lobby.players).length >= MAX_PLAYERS) { socket.emit("lobbyError", "Lobby piena."); return; }
+        if (Object.keys(lobby.players).length >= MAX_PLAYERS) { socket.emit("lobbyError", "Lobby full."); return; }
         // Controlla password se lobby privata
         if (lobby.private) {
             if (!password || password !== lobby.password) {
-                socket.emit("lobbyError", "Password errata.");
+                socket.emit("lobbyError", "Wrong password.");
                 return;
             }
         }
