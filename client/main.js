@@ -114,6 +114,19 @@ function playSound(type, freq, endFreq, duration, waveType="square") {
 const playShootSound = () => playSound("shoot", 320, 80, 0.12);
 const playHitSound   = () => playSound("hit",   600, 100, 0.15, "sawtooth");
 const playKillSound  = () => playSound("kill",  880, 1100, 0.2, "sine");
+function playKnifeSound() {
+    try {
+        const ctx = getAudio();
+        const osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(180, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(60, ctx.currentTime+0.06);
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.08);
+        osc.start(ctx.currentTime); osc.stop(ctx.currentTime+0.08);
+    } catch(e){}
+}
 function playDeathSound() {
     try {
         const ctx = getAudio();
@@ -162,7 +175,57 @@ function creaGunDrawObj() {
                 drawCircle({pos:vec2(hx,hy),radius:r,color:rgb(222,196,145)});
             };
             if (wtype==="fists") {
-                for (const s of [-1,1]) drawHand(px+cos*(R+2)+perp.x*17*s, py+sin*(R+2)+perp.y*17*s, 8);
+                // ── Karambit ──
+                // mano che regge il coltello
+                const hx0 = px+cos*(R+4)+perp.x*6;
+                const hy0 = py+sin*(R+4)+perp.y*6;
+                drawHand(hx0, hy0, 7);
+
+                // anello del karambit (rotondo alla base)
+                const ringX = px+cos*(R+2)+perp.x*14;
+                const ringY = py+sin*(R+2)+perp.y*14;
+                drawCircle({pos:vec2(ringX,ringY),radius:6,color:rgb(0,0,0)});
+                drawCircle({pos:vec2(ringX,ringY),radius:4,color:rgb(30,30,30)});
+                drawCircle({pos:vec2(ringX,ringY),radius:2,color:rgb(0,0,0)});
+
+                // manico del coltello
+                const mAng = angle + Math.PI*0.15;
+                const mcos = Math.cos(mAng), msin = Math.sin(mAng);
+                drawLine({
+                    p1: vec2(hx0, hy0),
+                    p2: vec2(hx0 + mcos*18, hy0 + msin*18),
+                    width: 5, color: rgb(15,15,15)
+                });
+                drawLine({
+                    p1: vec2(hx0+perp.x*1.5, hy0+perp.y*1.5),
+                    p2: vec2(hx0 + mcos*18+perp.x*1.5, hy0 + msin*18+perp.y*1.5),
+                    width: 2, color: rgb(60,50,40)
+                });
+
+                // lama curva del karambit — serie di segmenti che formano la curva
+                const bladeBase = {x: hx0 + mcos*18, y: hy0 + msin*18};
+                const bladeAng  = mAng - Math.PI*0.5;
+                const bcos = Math.cos(bladeAng), bsin = Math.sin(bladeAng);
+                const sweepAng = angle - Math.PI*0.4;
+                const scos = Math.cos(sweepAng), ssin = Math.sin(sweepAng);
+
+                // lama principale (scura con bordo)
+                drawLine({
+                    p1: vec2(bladeBase.x, bladeBase.y),
+                    p2: vec2(bladeBase.x + bcos*22 + scos*10, bladeBase.y + bsin*22 + ssin*10),
+                    width: 5, color: rgb(20,20,22)
+                });
+                drawLine({
+                    p1: vec2(bladeBase.x, bladeBase.y),
+                    p2: vec2(bladeBase.x + bcos*22 + scos*10, bladeBase.y + bsin*22 + ssin*10),
+                    width: 3, color: rgb(45,45,55)
+                });
+                // filo della lama (riflesso)
+                drawLine({
+                    p1: vec2(bladeBase.x - perp.x*1, bladeBase.y - perp.y*1),
+                    p2: vec2(bladeBase.x + bcos*20 + scos*9 - perp.x, bladeBase.y + bsin*20 + ssin*9 - perp.y),
+                    width: 1.5, color: rgb(160,170,200)
+                });
             } else if (wtype==="pistol") {
                 drawRect({pos:vec2(px+cos*R,py+sin*R),width:30,height:9,color:rgb(17,17,17),radius:4,angle:angle*(180/Math.PI),anchor:"left",offset:vec2(0,-4.5)});
                 drawHand(px+cos*(R+3),py+sin*(R+3),7);
@@ -601,7 +664,7 @@ const HUD_RADIUS = 4;
 function aggiornaHUDArma() {
     if (hudWeaponObj) destroy(hudWeaponObj);
     if (isMobile()) return;
-    const names = { gun:"Rifle", pistol:"Pistol", fists:"Fists" };
+    const names = { gun:"Rifle", pistol:"Pistol", fists:"Knife" };
     const keys  = ["gun","pistol","fists"];
     hudWeaponObj = add([fixed(), z(100), {
         draw() {
@@ -892,7 +955,7 @@ function creaTouchUI() {
         const bSize=28, gap=8;
 
         // 3 bottoni arma + 1 reload
-        [{key:"gun",label:"AR",color:"#e55"},{key:"pistol",label:"PI",color:"#e93"},{key:"fists",label:"PU",color:"#59e"}].forEach((w,i)=>{
+        [{key:"gun",label:"AR",color:"#e55"},{key:"pistol",label:"PI",color:"#e93"},{key:"fists",label:"KN",color:"#333"}].forEach((w,i)=>{
             const totalW=3*bSize+2*gap;
             const lp=Math.round(window.innerWidth/2-totalW/2)+i*(bSize+gap);
             const btn=document.createElement("button");
@@ -1028,41 +1091,39 @@ let aimJoyAngle=0; // angolo corrente del joystick mira, aggiornato in touchmove
 
 // Sparo desktop (mouse)
 function shoot() {
-    if (inMenu||inLobbyScreen||!socket||!myId||!players[myId]||players[myId].morto||weapon==="fists") return;
+    if (inMenu||inLobbyScreen||!socket||!myId||!players[myId]||players[myId].morto) return;
     if (weapon==="pistol"){const n=performance.now();if(n-lastPistolShot<PISTOL_COOLDOWN_MS)return;lastPistolShot=n;}
     const me=players[myId].sprite, mw=toWorld(mousePos());
     const dir={x:mw.x-me.pos.x,y:mw.y-me.pos.y};
     const len=Math.hypot(dir.x,dir.y); if(!len) return;
     const nx=dir.x/len,ny=dir.y/len,angle=Math.atan2(dir.y,dir.x);
-    const tipDist=24+(weapon==="pistol"?10:40);
+    const tipDist=weapon==="fists"?0:24+(weapon==="pistol"?10:40);
     socket.emit("aim",angle);
     socket.emit("shoot",{dir,tipOffset:{x:nx*tipDist,y:ny*tipDist}});
-    playShootSound();
+    if (weapon!=="fists") playShootSound(); else playKnifeSound();
 }
 
 // Sparo touch — usa la direzione del joystick destro
 function shootTouchJoy() {
     if (inMenu||inLobbyScreen||!socket||!myId||!players[myId]||players[myId].morto) return;
-    if (weapon==="fists"||!aimJoyActive) return;
+    if (!aimJoyActive) return;
     const nx=aimJoyDir.x, ny=aimJoyDir.y;
     if (!nx&&!ny) return;
-    const tipDist=24+(weapon==="pistol"?10:40);
+    const tipDist=weapon==="fists"?0:24+(weapon==="pistol"?10:40);
     socket.emit("shoot",{dir:{x:nx,y:ny},tipOffset:{x:nx*tipDist,y:ny*tipDist}});
-    playShootSound();
+    if (weapon!=="fists") playShootSound(); else playKnifeSound();
 }
 
 function fireLoop(){
     const n=performance.now();
-    // Desktop: autofire assalto, singolo pistola
     if(mouseDown&&weapon==="gun"&&n-lastAssaltoShot>=AUTO_FIRE_MS){shoot();lastAssaltoShot=n;}
-    // Touch: joystick mira attivo → invia aim ogni frame + autofire
+    if(mouseDown&&weapon==="fists"&&n-lastAssaltoShot>=800){shoot();lastAssaltoShot=n;}
     if(aimJoyActive){
-        if(socket) socket.emit("aim", aimJoyAngle); // mantiene la visuale bloccata
-        if(weapon!=="fists"){
-            const cooldown=weapon==="gun"?AUTO_FIRE_MS:PISTOL_COOLDOWN_MS;
-            if(n-lastPistolShot>=cooldown){
-                shootTouchJoy();
-                lastPistolShot=n;
+        if(socket) socket.emit("aim", aimJoyAngle);
+        const cooldown=weapon==="gun"?AUTO_FIRE_MS:weapon==="fists"?800:PISTOL_COOLDOWN_MS;
+        if(n-lastPistolShot>=cooldown){
+            shootTouchJoy();
+            lastPistolShot=n;
             }
         }
     }

@@ -23,8 +23,9 @@ if (RENDER_URL) {
 const map = { width: 5000, height: 5000 };
 const PLAYER_RADIUS = 20;
 const PLAYER_MAX_HP = 100;
-const DAMAGE_BY_WEAPON = { gun: 25, pistol: 15, fists: 0 };
-const COOLDOWN_BY_WEAPON = { gun: 100, pistol: 200, fists: 0 };
+const DAMAGE_BY_WEAPON    = { gun: 25, pistol: 15, fists: 100 };
+const COOLDOWN_BY_WEAPON  = { gun: 100, pistol: 200, fists: 800 };
+const RANGE_BY_WEAPON     = { gun: null, pistol: null, fists: 80 }; // raggio corpo a corpo
 const MAX_AMMO = { gun: 30, pistol: 15, fists: 0 };
 const RELOAD_TIME = { gun: 2000, pistol: 1500 };
 const SPEED = 300;
@@ -251,13 +252,38 @@ function creaLobby(lobbyId, lobbyName, password) {
         socket.on("shoot", (data) => {
             const p = lobby.players[socket.id];
             if (!p || p.morto || !data || typeof data.dir !== "object") return;
-            if (p.weapon === "fists") return;
+            const now = Date.now();
+            if (now - p.lastShot < (COOLDOWN_BY_WEAPON[p.weapon] ?? 100)) return;
+            p.lastShot = now;
+
+            // ── Karambit (corpo a corpo) ──
+            if (p.weapon === "fists") {
+                const range = RANGE_BY_WEAPON.fists;
+                for (const id in lobby.players) {
+                    if (id === socket.id) continue;
+                    const target = lobby.players[id];
+                    if (target.morto) continue;
+                    const dist = Math.hypot(target.pos.x - p.pos.x, target.pos.y - p.pos.y);
+                    if (dist <= range) {
+                        target.hp -= DAMAGE_BY_WEAPON.fists;
+                        target.hitFlash = true;
+                        target.lastHit  = now;
+                        if (target.hp <= 0) {
+                            target.hp = 0; target.morto = true;
+                            target.dir = { x:0, y:0 };
+                            if (lobby.leaderboard[id])         lobby.leaderboard[id].deaths++;
+                            if (lobby.leaderboard[socket.id])  lobby.leaderboard[socket.id].kills++;
+                            lobby.nsp.to(socket.id).emit("killConfirm", { victim: target.nickname });
+                        }
+                    }
+                }
+                return;
+            }
+
+            // ── Armi a fuoco ──
             if (!p.ammo) p.ammo = { gun: MAX_AMMO.gun, pistol: MAX_AMMO.pistol };
             if (p.ammo[p.weapon] <= 0) return;
             if (p.reloading) return;
-            const now = Date.now();
-            if (now - p.lastShot < (COOLDOWN_BY_WEAPON[p.weapon] ?? 120)) return;
-            p.lastShot = now;
             const { dir, tipOffset } = data;
             if (typeof dir.x !== "number" || typeof dir.y !== "number") return;
             const len = Math.hypot(dir.x, dir.y);
@@ -297,9 +323,8 @@ function creaLobby(lobbyId, lobbyName, password) {
 
             broadcastLobbyList();
 
-            // Se vuota, cancella subito la lobby
+            // Se vuota, cancella dopo 5 minuti
             if (Object.keys(lobby.players).length === 0) {
-                // Piccolo delay per evitare race condition con rejoin immediato
                 lobby.cleanupTimer = setTimeout(() => {
                     if (lobbies[lobbyId] && Object.keys(lobby.players).length === 0) {
                         nsp.disconnectSockets(true);
@@ -308,7 +333,7 @@ function creaLobby(lobbyId, lobbyName, password) {
                         console.log(`Lobby rimossa (vuota): ${lobbyId}`);
                         broadcastLobbyList();
                     }
-                }, 3000); // 3 secondi di grazia per eventuali rejoin
+                }, REJOIN_TTL);
             }
         });
     });
