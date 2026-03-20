@@ -452,6 +452,7 @@ function connettiALobby(lobbyId, lobbyName, token) {
         reloadStartTime = Date.now();
         reloadDuration  = duration;
         aggiornaHUDAmmo();
+        aggiornaReloadBtn();
     });
 
     socket.on("reloadDone", ({ weapon: w }) => {
@@ -459,6 +460,7 @@ function connettiALobby(lobbyId, lobbyName, token) {
         reloadStartTime = 0;
         reloadDuration  = 0;
         aggiornaHUDAmmo();
+        aggiornaReloadBtn();
     });
 
     socket.on("state", (state) => aggiornaStato(state));
@@ -553,6 +555,8 @@ let myKills=0, myDeaths=0;
 let myAmmo = { gun: 30, pistol: 15 };
 let isReloading = false;
 let reloadTimer = null;
+let reloadStartTime = 0;
+let reloadDuration  = 0;
 
 // Helper: converte coordinate 1280×720 → coordinate canvas reali (con letterbox)
 function hx(x) { const {scale,left} = calcolaLetterbox(); return left + x * scale; }
@@ -701,13 +705,13 @@ function aggiornaHUDStats() {
 
 function aggiornaHUDLobby() {
     if (hudLobbyObj) destroy(hudLobbyObj); if (!myLobbyName) return;
-    hudLobbyObj = hudBox(`Lobby: ${myLobbyName}`, hx(14), hy(10),
+    hudLobbyObj = hudBox(`Lobby: ${myLobbyName}`, hx(10), hy(10),
         { size:hs(11), textCol:HUD_TEXT_DIM, boxCol:HUD_BOX, boxAlpha:0.35, pad:hs(5), radius:HUD_RADIUS });
 }
 
 function aggiornaHUDPlayers(count, max) {
     if (hudPlayersObj) destroy(hudPlayersObj);
-    hudPlayersObj = hudBox(`Players: ${count}/${max}`, hx(14), hy(30),
+    hudPlayersObj = hudBox(`Players: ${count}/${max}`, hx(10), hy(32),
         { size:hs(11), textCol:HUD_TEXT_DIM, boxCol:HUD_BOX, boxAlpha:0.35, pad:hs(5), radius:HUD_RADIUS });
 }
 
@@ -805,6 +809,7 @@ let aimJoyDir={x:0,y:0};   // direzione normalizzata corrente del joystick mira
 let aimJoyActive=false;     // joystick destro premuto → sparo attivo
 
 let weaponBtns=[];
+let reloadBtn=null;
 
 function aggiornaWeaponBtns() {
     weaponBtns.forEach(b => {
@@ -812,6 +817,22 @@ function aggiornaWeaponBtns() {
         b.style.borderColor = a?"rgba(255,255,255,0.95)":"rgba(255,255,255,0.3)";
         b.style.transform   = a?"scale(1.12)":"scale(1)";
     });
+}
+
+function aggiornaReloadBtn() {
+    if (!reloadBtn) return;
+    if (isReloading) {
+        reloadBtn.textContent = "...";
+        reloadBtn.style.opacity = "0.5";
+    } else if (myAmmo[weapon] === 0) {
+        reloadBtn.textContent = "[R]";
+        reloadBtn.style.opacity = "1";
+        reloadBtn.style.color = "#f55";
+    } else {
+        reloadBtn.textContent = "[R]";
+        reloadBtn.style.opacity = "0.7";
+        reloadBtn.style.color = "white";
+    }
 }
 
 function creaCanvasJoystick(lato) {
@@ -854,34 +875,48 @@ function creaTouchUI() {
     moveJoyCenter = { x:24+JOYSTICK_R+10, y:window.innerHeight-24-JOYSTICK_R-10 };
     disegnaJoy(moveJoyEl, 0, 0, "rgba(255,255,255,0.7)");
 
-    // Joystick mira (destra) — knob rosso per distinguerlo
+    // Joystick mira (destra)
     aimJoyEl = creaCanvasJoystick("right");
     aimJoyCenter = { x:window.innerWidth-24-JOYSTICK_R-10, y:window.innerHeight-24-JOYSTICK_R-10 };
     disegnaJoy(aimJoyEl, 0, 0, "rgba(255,100,100,0.8)");
 
-    // Bottoni arma — 28px (doppio), centrati, sopra la barra vita
+    // Bottoni arma + reload — centrati, sopra la barra vita
     if (!weaponBtns.length) {
+        const barTop   = hy(GAME_H-44);
+        const bottomPx = Math.round(window.innerHeight - barTop + 8);
+        const bSize=28, gap=8;
+
+        // 3 bottoni arma + 1 reload
         [{key:"gun",label:"AR",color:"#e55"},{key:"pistol",label:"PI",color:"#e93"},{key:"fists",label:"PU",color:"#59e"}].forEach((w,i)=>{
+            const totalW=3*bSize+2*gap;
+            const lp=Math.round(window.innerWidth/2-totalW/2)+i*(bSize+gap);
             const btn=document.createElement("button");
             btn.textContent=w.label; btn.dataset.weapon=w.key;
-            const bSize=28, gap=8, totalW=3*bSize+2*gap;
-            const lp=Math.round(window.innerWidth/2-totalW/2)+i*(bSize+gap);
-            // posizione: sopra la barra vita di ~8px
-            const barTop = hy(GAME_H-44);
-            const bottomPx = Math.round(window.innerHeight - barTop + 8);
             btn.style.cssText=`position:fixed;left:${lp}px;bottom:${bottomPx}px;width:${bSize}px;height:${bSize}px;background:${w.color};color:white;font-size:10px;font-weight:bold;border:1px solid rgba(255,255,255,0.3);border-radius:4px;cursor:pointer;z-index:600;opacity:0.9;font-family:monospace;padding:0;line-height:${bSize}px;text-align:center;`;
             btn.addEventListener("touchstart", e=>{ e.preventDefault(); e.stopPropagation(); }, {passive:false});
             btn.addEventListener("touchend",   e=>{ e.preventDefault(); e.stopPropagation(); weapon=w.key; socket.emit("setWeapon",w.key); aggiornaHUDArma(); aggiornaWeaponBtns(); aggiornaHUDAmmo(); }, {passive:false});
             document.body.appendChild(btn); weaponBtns.push(btn);
         });
+
+        // Bottone reload — a destra dei bottoni arma
+        const totalWArma = 3*bSize+2*gap;
+        const reloadLeft = Math.round(window.innerWidth/2 - totalWArma/2) + totalWArma + 10;
+        reloadBtn = document.createElement("button");
+        reloadBtn.textContent = "[R]";
+        reloadBtn.style.cssText=`position:fixed;left:${reloadLeft}px;bottom:${bottomPx}px;width:${bSize}px;height:${bSize}px;background:rgba(30,30,30,0.8);color:white;font-size:9px;font-weight:bold;border:1px solid rgba(255,255,255,0.3);border-radius:4px;cursor:pointer;z-index:600;opacity:0.7;font-family:monospace;padding:0;line-height:${bSize}px;text-align:center;`;
+        reloadBtn.addEventListener("touchstart", e=>{ e.preventDefault(); e.stopPropagation(); }, {passive:false});
+        reloadBtn.addEventListener("touchend",   e=>{ e.preventDefault(); e.stopPropagation(); if(!isReloading && weapon!=="fists" && socket) socket.emit("reload"); }, {passive:false});
+        document.body.appendChild(reloadBtn);
     }
     aggiornaWeaponBtns();
+    aggiornaReloadBtn();
 }
 
 function rimuoviTouchUI() {
     if (moveJoyEl){moveJoyEl.remove();moveJoyEl=null;}
     if (aimJoyEl){aimJoyEl.remove();aimJoyEl=null;}
     weaponBtns.forEach(b=>b.remove()); weaponBtns=[];
+    if (reloadBtn){reloadBtn.remove();reloadBtn=null;}
     moveJoyTouchId=null; aimJoyTouchId=null; aimJoyActive=false; aimJoyDir={x:0,y:0};
 }
 
@@ -1064,7 +1099,7 @@ function aggiornaStato(state) {
     if(state.playerCount!==undefined) aggiornaHUDPlayers(state.playerCount,state.maxPlayers);
     if(myId && state.players[myId] && state.players[myId].ammo){
         const a=state.players[myId].ammo;
-        if(a.gun!==myAmmo.gun||a.pistol!==myAmmo.pistol){ myAmmo=a; aggiornaHUDAmmo(); }
+        if(a.gun!==myAmmo.gun||a.pistol!==myAmmo.pistol){ myAmmo=a; aggiornaHUDAmmo(); aggiornaReloadBtn(); }
     }
 
     // Rimuovi player non più presenti
