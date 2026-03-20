@@ -122,6 +122,7 @@ function getLobbyList() {
         id: l.id, name: l.name,
         players: Object.keys(l.players).length,
         max: MAX_PLAYERS, createdAt: l.createdAt,
+        private: l.private,
     }));
 }
 
@@ -129,12 +130,14 @@ function broadcastLobbyList() {
     io.emit("lobbyList", getLobbyList());
 }
 
-function creaLobby(lobbyId, lobbyName) {
+function creaLobby(lobbyId, lobbyName, password) {
     const ostacoli = generaMappa();
     const lobby = {
         id: lobbyId, name: lobbyName,
-        players: {},       // socketId → playerData
-        tokens: {},        // token → { nickname, kills, deaths, expireAt }
+        private: !!password,
+        password: password || null,
+        players: {},
+        tokens: {},
         proiettili: [],
         ostacoli,
         ostacoliSolidi: ostacoli.filter(o => o.type !== "cespuglio"),
@@ -304,19 +307,39 @@ io.on("connection", socket => {
     socket.emit("lobbyList", getLobbyList());
 
     socket.on("createLobby", (data) => {
-        const lobbyName = (data && typeof data.name === "string" && data.name.trim())
+        const rawName = (data && typeof data.name === "string" && data.name.trim())
             ? data.name.trim().slice(0, 30)
-            : "Lobby " + Math.floor(Math.random() * 9000 + 1000);
+            : "";
+        const lobbyName = rawName || "Lobby " + Math.floor(Math.random() * 9000 + 1000);
+        const password  = (data && typeof data.password === "string" && data.password.trim())
+            ? data.password.trim().slice(0, 30)
+            : null;
+        const isPrivate = !!(data && data.private && password);
+
+        // Nomi unici — controlla solo se il nome è stato specificato
+        if (rawName) {
+            const exists = Object.values(lobbies).some(l => l.name.toLowerCase() === lobbyName.toLowerCase());
+            if (exists) { socket.emit("lobbyError", `Esiste già una lobby chiamata "${lobbyName}".`); return; }
+        }
+
         const lobbyId = crypto.randomBytes(4).toString("hex");
-        creaLobby(lobbyId, lobbyName);
+        creaLobby(lobbyId, lobbyName, isPrivate ? password : null);
         socket.emit("lobbyCreated", { lobbyId, lobbyName });
     });
 
     socket.on("joinLobby", (data) => {
-        const lobbyId = data && data.lobbyId;
+        const lobbyId  = data && data.lobbyId;
+        const password = data && data.password;
         if (!lobbyId || !lobbies[lobbyId]) { socket.emit("lobbyError", "Lobby non trovata."); return; }
         const lobby = lobbies[lobbyId];
         if (Object.keys(lobby.players).length >= MAX_PLAYERS) { socket.emit("lobbyError", "Lobby piena."); return; }
+        // Controlla password se lobby privata
+        if (lobby.private) {
+            if (!password || password !== lobby.password) {
+                socket.emit("lobbyError", "Password errata.");
+                return;
+            }
+        }
         socket.emit("lobbyJoinOk", { lobbyId, lobbyName: lobby.name });
     });
 });

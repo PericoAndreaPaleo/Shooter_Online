@@ -186,7 +186,6 @@ function mostraSchermataLobby(errorMsg) {
     uiLayer.push(add([rect(width(),height()), pos(0,0), color(rgb(5,10,20)), opacity(0.97), fixed(), z(200)]));
     uiLayer.push(add([text("SHOOTER ONLINE",{size:hs(46)}), pos(hx(GAME_W/2),hy(54)), anchor("center"), color(rgb(0,255,100)), fixed(), z(201)]));
 
-    // scala base per font e padding — max 1 (non scala su su PC, solo giù su mobile)
     const S = Math.min(1, Math.min(window.innerWidth, window.innerHeight*16/9) / 520);
     const fs = (n) => `${Math.max(10, Math.round(n*S))}px`;
 
@@ -202,6 +201,7 @@ function mostraSchermataLobby(errorMsg) {
         htmlContainer.appendChild(e);
     }
 
+    // Riga nome + crea
     const row = document.createElement("div");
     row.style.cssText = `display:flex;gap:${Math.round(8*S)}px;width:100%;`;
     const nameInput = document.createElement("input");
@@ -215,9 +215,46 @@ function mostraSchermataLobby(errorMsg) {
     createBtn.style.cssText = `padding:${Math.round(10*S)}px ${Math.round(16*S)}px;
         background:rgb(0,160,70);color:white;font-size:${fs(16)};font-weight:bold;
         border:none;border-radius:6px;cursor:pointer;font-family:monospace;white-space:nowrap;`;
-    createBtn.addEventListener("click", () => mainSocket.emit("createLobby", { name: nameInput.value.trim() }));
     row.appendChild(nameInput); row.appendChild(createBtn);
     htmlContainer.appendChild(row);
+
+    // Riga opzioni: privata + password
+    const optRow = document.createElement("div");
+    optRow.style.cssText = `display:flex;align-items:center;gap:${Math.round(10*S)}px;width:100%;`;
+
+    const privLabel = document.createElement("label");
+    privLabel.style.cssText = `display:flex;align-items:center;gap:6px;color:rgba(255,255,255,0.7);font-family:monospace;font-size:${fs(14)};cursor:pointer;white-space:nowrap;`;
+    const privCheck = document.createElement("input");
+    privCheck.type = "checkbox";
+    privCheck.style.cssText = "width:16px;height:16px;cursor:pointer;accent-color:#e93;";
+    privLabel.appendChild(privCheck);
+    privLabel.appendChild(document.createTextNode("🔒 Privata"));
+
+    const pwdInput = document.createElement("input");
+    pwdInput.type = "password";
+    pwdInput.placeholder = "Password";
+    pwdInput.maxLength = 30;
+    pwdInput.style.cssText = `flex:1;padding:${Math.round(8*S)}px ${Math.round(10*S)}px;
+        background:rgba(255,255,255,0.08);border:2px solid rgba(255,150,0,0.4);
+        border-radius:6px;color:white;font-size:${fs(14)};font-family:monospace;outline:none;
+        display:none;`;
+
+    privCheck.addEventListener("change", () => {
+        pwdInput.style.display = privCheck.checked ? "block" : "none";
+        if (privCheck.checked) pwdInput.focus();
+    });
+
+    optRow.appendChild(privLabel);
+    optRow.appendChild(pwdInput);
+    htmlContainer.appendChild(optRow);
+
+    createBtn.addEventListener("click", () => {
+        const name = nameInput.value.trim();
+        const isPrivate = privCheck.checked;
+        const pwd = pwdInput.value.trim();
+        if (isPrivate && !pwd) { pwdInput.style.border="2px solid #f55"; pwdInput.focus(); return; }
+        mainSocket.emit("createLobby", { name, private: isPrivate, password: isPrivate ? pwd : null });
+    });
 
     const sep = document.createElement("div");
     sep.textContent = "── oppure entra in una lobby esistente ──";
@@ -246,27 +283,66 @@ function renderLobbyList(container, list, S=1) {
     for (const l of list) {
         const full = l.players >= l.max;
         const row = document.createElement("div");
-        row.style.cssText = `display:flex;align-items:center;justify-content:space-between;
+        row.style.cssText = `display:flex;flex-direction:column;gap:6px;
             background:rgba(255,255,255,0.07);border-radius:8px;
             padding:${Math.round(10*S)}px ${Math.round(14*S)}px;
-            border:1px solid rgba(255,255,255,${full?"0.1":"0.2"});opacity:${full?"0.55":"1"};`;
+            border:1px solid rgba(255,255,255,${full?"0.1":l.private?"0.35":"0.2"});
+            opacity:${full?"0.55":"1"};`;
+
+        // Riga principale: info + bottone
+        const mainRow = document.createElement("div");
+        mainRow.style.cssText = "display:flex;align-items:center;justify-content:space-between;";
+
         const info = document.createElement("div");
         info.style.cssText = "display:flex;flex-direction:column;gap:3px;";
         const nameEl = document.createElement("span");
-        nameEl.textContent = l.name || l.id;
-        nameEl.style.cssText = `color:white;font-family:monospace;font-size:${fs(16)};font-weight:bold;`;
+        nameEl.textContent = (l.private ? "🔒 " : "") + (l.name || l.id);
+        nameEl.style.cssText = `color:${l.private?"#ffa":"white"};font-family:monospace;font-size:${fs(16)};font-weight:bold;`;
         const countEl = document.createElement("span");
         countEl.textContent = `${l.players}/${l.max} giocatori${full?" — PIENA":""}`;
         countEl.style.cssText = `color:${full?"#f88":"#8f8"};font-family:monospace;font-size:${fs(13)};`;
         info.appendChild(nameEl); info.appendChild(countEl);
+
         const btn = document.createElement("button");
         btn.textContent = "ENTRA"; btn.disabled = full;
         btn.style.cssText = `padding:${Math.round(8*S)}px ${Math.round(16*S)}px;
-            background:${full?"rgba(100,100,100,0.5)":"rgb(0,120,200)"};
+            background:${full?"rgba(100,100,100,0.5)":l.private?"rgb(180,100,0)":"rgb(0,120,200)"};
             color:white;font-size:${fs(15)};font-weight:bold;border:none;border-radius:6px;
             cursor:${full?"not-allowed":"pointer"};font-family:monospace;`;
-        if (!full) btn.addEventListener("click", () => mainSocket.emit("joinLobby", { lobbyId: l.id }));
-        row.appendChild(info); row.appendChild(btn);
+
+        mainRow.appendChild(info); mainRow.appendChild(btn);
+        row.appendChild(mainRow);
+
+        // Se privata: campo password nascosto che appare al click di ENTRA
+        if (l.private && !full) {
+            const pwdRow = document.createElement("div");
+            pwdRow.style.cssText = "display:none;flex;gap:6px;align-items:center;";
+            const pwdInput = document.createElement("input");
+            pwdInput.type = "password";
+            pwdInput.placeholder = "Inserisci password...";
+            pwdInput.style.cssText = `flex:1;padding:7px 10px;background:rgba(255,255,255,0.08);
+                border:2px solid rgba(255,150,0,0.5);border-radius:6px;color:white;
+                font-size:${fs(14)};font-family:monospace;outline:none;`;
+            const confirmBtn = document.createElement("button");
+            confirmBtn.textContent = "OK";
+            confirmBtn.style.cssText = `padding:7px 14px;background:rgb(180,100,0);color:white;
+                font-size:${fs(14)};font-weight:bold;border:none;border-radius:6px;cursor:pointer;font-family:monospace;`;
+
+            const doJoin = () => mainSocket.emit("joinLobby", { lobbyId: l.id, password: pwdInput.value });
+            confirmBtn.addEventListener("click", doJoin);
+            pwdInput.addEventListener("keydown", e => { if (e.key==="Enter") doJoin(); });
+
+            btn.addEventListener("click", () => {
+                pwdRow.style.display = "flex";
+                pwdInput.focus();
+            });
+
+            pwdRow.appendChild(pwdInput); pwdRow.appendChild(confirmBtn);
+            row.appendChild(pwdRow);
+        } else if (!full) {
+            btn.addEventListener("click", () => mainSocket.emit("joinLobby", { lobbyId: l.id }));
+        }
+
         container.appendChild(row);
     }
 }
@@ -406,23 +482,39 @@ function connettiALobby(lobbyId, lobbyName, token) {
 // ========================
 function mostraMenu(sottotitolo) {
     distruggiUI(); inMenu = true; inLobbyScreen = false;
+
+    // centro della viewport di gioco in coordinate canvas fisiche
+    const cx = hx(GAME_W/2), cy = hy(GAME_H/2);
+    const sc = calcolaLetterbox().scale;
+
     uiLayer.push(add([rect(width(),height()), pos(0,0), color(rgb(5,10,5)), opacity(0.88), fixed(), z(200)]));
-    uiLayer.push(add([text("SHOOTER ONLINE",{size:52}), pos(width()/2,height()/2-140), anchor("center"), color(rgb(0,255,100)), fixed(), z(201)]));
-    if (myNickname) uiLayer.push(add([text(myNickname,{size:22}), pos(width()/2,height()/2-70), anchor("center"), color(rgb(0,200,255)), fixed(), z(201)]));
-    if (myLobbyName) uiLayer.push(add([text(`Lobby: ${myLobbyName}`,{size:16}), pos(width()/2,height()/2-40), anchor("center"), color(rgb(180,180,180)), fixed(), z(201)]));
-    if (sottotitolo) uiLayer.push(add([text(sottotitolo,{size:26}), pos(width()/2,height()/2-8), anchor("center"), color(rgb(220,80,80)), fixed(), z(201)]));
+    uiLayer.push(add([text("SHOOTER ONLINE",{size:hs(52)}), pos(cx, hy(GAME_H/2-140)), anchor("center"), color(rgb(0,255,100)), fixed(), z(201)]));
+    if (myNickname) uiLayer.push(add([text(myNickname,{size:hs(22)}), pos(cx, hy(GAME_H/2-70)), anchor("center"), color(rgb(0,200,255)), fixed(), z(201)]));
+    if (myLobbyName) uiLayer.push(add([text(`Lobby: ${myLobbyName}`,{size:hs(16)}), pos(cx, hy(GAME_H/2-40)), anchor("center"), color(rgb(180,180,180)), fixed(), z(201)]));
+    if (sottotitolo) uiLayer.push(add([text(sottotitolo,{size:hs(26)}), pos(cx, hy(GAME_H/2-8)), anchor("center"), color(rgb(220,80,80)), fixed(), z(201)]));
+
+    const bW = Math.round(220*sc), bH = Math.round(60*sc);
+    const bH2 = Math.round(40*sc);
+    const gap = Math.round(12*sc);
+    const topOffset = Math.round(60*sc);
 
     htmlContainer = document.createElement("div");
-    htmlContainer.style.cssText = "position:fixed;left:50%;top:50%;transform:translate(-50%,60px);display:flex;flex-direction:column;align-items:center;gap:12px;z-index:9999;";
+    htmlContainer.style.cssText = `position:fixed;left:${cx}px;top:${hy(GAME_H/2)+topOffset}px;
+        transform:translate(-50%,0);display:flex;flex-direction:column;
+        align-items:center;gap:${gap}px;z-index:9999;`;
 
     const btn = document.createElement("button");
     btn.textContent = "GIOCA";
-    btn.style.cssText = "width:220px;height:60px;background:rgb(0,180,70);color:white;font-size:30px;font-weight:bold;border:none;border-radius:6px;cursor:pointer;font-family:monospace;letter-spacing:2px;";
+    btn.style.cssText = `width:${bW}px;height:${bH}px;background:rgb(0,180,70);color:white;
+        font-size:${Math.round(30*sc)}px;font-weight:bold;border:none;border-radius:6px;
+        cursor:pointer;font-family:monospace;letter-spacing:2px;`;
     btn.addEventListener("click", () => { nascondiElementiHTML(); distruggiUI(); socket.emit("spawn"); });
 
     const backBtn = document.createElement("button");
     backBtn.textContent = "← Cambia Lobby";
-    backBtn.style.cssText = "width:220px;height:40px;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.7);font-size:15px;border:1px solid rgba(255,255,255,0.2);border-radius:6px;cursor:pointer;font-family:monospace;";
+    backBtn.style.cssText = `width:${bW}px;height:${bH2}px;background:rgba(255,255,255,0.1);
+        color:rgba(255,255,255,0.7);font-size:${Math.round(15*sc)}px;
+        border:1px solid rgba(255,255,255,0.2);border-radius:6px;cursor:pointer;font-family:monospace;`;
     backBtn.addEventListener("click", () => {
         localStorage.removeItem("lobbyId");
         localStorage.removeItem("lobbyName");
