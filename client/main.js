@@ -186,8 +186,8 @@ function mostraSchermataLobby(errorMsg) {
     uiLayer.push(add([rect(width(),height()), pos(0,0), color(rgb(5,10,20)), opacity(0.97), fixed(), z(200)]));
     uiLayer.push(add([text("SHOOTER ONLINE",{size:hs(46)}), pos(hx(GAME_W/2),hy(54)), anchor("center"), color(rgb(0,255,100)), fixed(), z(201)]));
 
-    // scala base per font e padding — relativa alla larghezza schermo
-    const S = Math.min(window.innerWidth, window.innerHeight*16/9) / 520;
+    // scala base per font e padding — max 1 (non scala su su PC, solo giù su mobile)
+    const S = Math.min(1, Math.min(window.innerWidth, window.innerHeight*16/9) / 520);
     const fs = (n) => `${Math.max(10, Math.round(n*S))}px`;
 
     htmlContainer = document.createElement("div");
@@ -276,7 +276,7 @@ mainSocket.on("lobbyList", (list) => {
     lobbyListData = list;
     if (inLobbyScreen && htmlContainer) {
         const el = document.getElementById("lobby-list");
-        const S = Math.min(window.innerWidth, window.innerHeight*16/9) / 520;
+        const S = Math.min(1, Math.min(window.innerWidth, window.innerHeight*16/9) / 520);
         if (el) renderLobbyList(el, list, S);
     }
 });
@@ -521,7 +521,7 @@ window.addEventListener("keyup", e => {
 // ========================
 // TOUCH UI — doppio joystick
 // ========================
-const JOYSTICK_R=70, KNOB_R=28, DEAD_ZONE=15;
+const JOYSTICK_R=35, KNOB_R=14, DEAD_ZONE=8;
 
 // Joystick sinistro (movimento)
 let moveJoyEl=null, moveJoyTouchId=null, moveJoyCenter={x:0,y:0};
@@ -585,17 +585,17 @@ function creaTouchUI() {
     aimJoyCenter = { x:window.innerWidth-24-JOYSTICK_R-10, y:window.innerHeight-24-JOYSTICK_R-10 };
     disegnaJoy(aimJoyEl, 0, 0, "rgba(255,100,100,0.8)");
 
-    // Bottoni arma — piccoli, centrati, sopra la barra vita
+    // Bottoni arma — 28px (doppio), centrati, sopra la barra vita
     if (!weaponBtns.length) {
         [{key:"gun",label:"AR",color:"#e55"},{key:"pistol",label:"PI",color:"#e93"},{key:"fists",label:"PU",color:"#59e"}].forEach((w,i)=>{
             const btn=document.createElement("button");
             btn.textContent=w.label; btn.dataset.weapon=w.key;
-            // 1/4 di 52 = 13, ma usiamo 14 come minimo leggibile
-            const bSize=14, gap=6, totalW=3*bSize+2*gap;
+            const bSize=28, gap=8, totalW=3*bSize+2*gap;
             const lp=Math.round(window.innerWidth/2-totalW/2)+i*(bSize+gap);
-            // sopra la barra vita: la barra è a hy(GAME_H-44), mettiamo i bottoni ~30px sopra
-            const bottomPx = window.innerHeight - hy(GAME_H-44) + hs(20) + bSize + 4;
-            btn.style.cssText=`position:fixed;left:${lp}px;bottom:${bottomPx}px;width:${bSize}px;height:${bSize}px;background:${w.color};color:white;font-size:7px;font-weight:bold;border:1px solid rgba(255,255,255,0.3);border-radius:3px;cursor:pointer;z-index:600;opacity:0.9;font-family:monospace;padding:0;line-height:${bSize}px;text-align:center;`;
+            // posizione: sopra la barra vita di ~8px
+            const barTop = hy(GAME_H-44);
+            const bottomPx = Math.round(window.innerHeight - barTop + 8);
+            btn.style.cssText=`position:fixed;left:${lp}px;bottom:${bottomPx}px;width:${bSize}px;height:${bSize}px;background:${w.color};color:white;font-size:10px;font-weight:bold;border:1px solid rgba(255,255,255,0.3);border-radius:4px;cursor:pointer;z-index:600;opacity:0.9;font-family:monospace;padding:0;line-height:${bSize}px;text-align:center;`;
             btn.addEventListener("touchstart", e=>{ e.preventDefault(); e.stopPropagation(); }, {passive:false});
             btn.addEventListener("touchend",   e=>{ e.preventDefault(); e.stopPropagation(); weapon=w.key; socket.emit("setWeapon",w.key); aggiornaHUDArma(); aggiornaWeaponBtns(); }, {passive:false});
             document.body.appendChild(btn); weaponBtns.push(btn);
