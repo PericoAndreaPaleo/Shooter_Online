@@ -11,8 +11,8 @@ if (!sessionStorage.getItem("reloaded")) {
 // ========================
 // RISOLUZIONE FISSA (letterbox 16:9)
 // ========================
-const GAME_W = 1280;
-const GAME_H = 720;
+const GAME_W = 1600;
+const GAME_H = 900;
 
 function calcolaLetterbox() {
     const scaleX = window.innerWidth  / GAME_W;
@@ -607,7 +607,7 @@ function aggiornaHUDArma() {
         draw() {
             const sz = hs(12), pad = hs(6), gap = hs(4);
             let cx = hx(10);
-            const by = hy(GAME_H - 46);
+            const by = hy(GAME_H - 52);
             for (const k of keys) {
                 const label = names[k];
                 const tw = label.length * sz * 0.58 + pad*2;
@@ -695,7 +695,7 @@ function aggiornaHUDAmmo() {
 function aggiornaHUDStats() {
     if (hudKillsObj) destroy(hudKillsObj);
     hudKillsObj = hudBox(
-        () => hx(10), () => hy(GAME_H-28),
+        () => hx(10), () => hy(GAME_H-26),
         () => `K: ${myKills}  D: ${myDeaths}`,
         { size:()=>hs(14), textCol:HUD_TEXT, boxCol:HUD_BOX, boxAlpha:HUD_ALPHA, pad:()=>hs(6), radius:HUD_RADIUS }
     );
@@ -713,7 +713,7 @@ function aggiornaHUDLobby() {
 function aggiornaHUDPlayers(count, max) {
     if (hudPlayersObj) destroy(hudPlayersObj);
     hudPlayersObj = hudBox(
-        () => hx(10), () => hy(28),
+        () => hx(10), () => hy(34),
         () => `Players: ${count}/${max}`,
         { size:()=>hs(11), textCol:rgb(230,230,230), boxCol:HUD_BOX, boxAlpha:0.55, pad:()=>hs(5), radius:HUD_RADIUS }
     );
@@ -1132,6 +1132,10 @@ function aggiornaStato(state) {
                 drawRect({pos:vec2(bx,by),width:W,height:H,radius:r,color:rgb(90,90,90)});
                 const t=this._disp/100,c=t>0.5?rgb(Math.round((1-t)*2*220),220,0):rgb(220,Math.round(t*2*220),0);
                 if(this._disp>0)drawRect({pos:vec2(bx,by),width:Math.max(W*(this._disp/100),r*2),height:H,radius:r,color:c});
+                const hpStr=`${Math.ceil(this._disp)} | 100`;
+                const sz=hs(12);
+                const tw=hpStr.length*sz*0.58;
+                drawText({text:hpStr,pos:vec2(bx+W/2-tw/2,by+H/2-sz*0.6),size:sz,color:rgb(255,255,255)});
             }}]):null;
             players[id]={sprite,labelObj,hpBar,dirIndicator:{angle:s.angle||0,visible:true},morto:s.morto};
             if(isMe){distruggiUI();inMenu=false;cameraInizializzata=false;prevInput="";socket.emit("input",input);if(isMobile())creaTouchUI();}
@@ -1149,6 +1153,10 @@ function aggiornaStato(state) {
                         drawRect({pos:vec2(bx,by),width:W,height:H,radius:r,color:rgb(90,90,90)});
                         const t=this._disp/100,c=t>0.5?rgb(Math.round((1-t)*2*220),220,0):rgb(220,Math.round(t*2*220),0);
                         if(this._disp>0)drawRect({pos:vec2(bx,by),width:Math.max(W*(this._disp/100),r*2),height:H,radius:r,color:c});
+                        const hpStr=`${Math.ceil(this._disp)} | 100`;
+                        const sz=hs(12);
+                        const tw=hpStr.length*sz*0.58;
+                        drawText({text:hpStr,pos:vec2(bx+W/2-tw/2,by+H/2-sz*0.6),size:sz,color:rgb(255,255,255)});
                     }}]);
                     if(isMobile())creaTouchUI();
                 }
@@ -1167,8 +1175,39 @@ function aggiornaStato(state) {
     const serverIds=new Set(state.proiettili.map(b=>b.id));
     for(const id in bulletSprites){if(!serverIds.has(Number(id))){destroy(bulletSprites[id]);delete bulletSprites[id];}}
     for(const b of state.proiettili){
-        if(!bulletSprites[b.id]) bulletSprites[b.id]=add([pos(b.pos.x,b.pos.y),anchor("center"),circle(3),color(rgb(255,200,0)),z(3)]);
-        else bulletSprites[b.id].pos=vec2(b.pos.x,b.pos.y);
+        if(!bulletSprites[b.id]){
+            const hdx = b.dir.x, hdy = b.dir.y; // dir già normalizzato
+            bulletSprites[b.id]=add([pos(b.pos.x,b.pos.y), z(3), {
+                _hdx: hdx, _hdy: hdy,
+                draw(){
+                    const len = 18, thick = 3.5;
+                    const px = this.pos.x, py = this.pos.y;
+                    // ombra sottile
+                    drawLine({
+                        p1: vec2(px - this._hdx*(len/2+1), py - this._hdy*(len/2+1)),
+                        p2: vec2(px + this._hdx*(len/2+1), py + this._hdy*(len/2+1)),
+                        width: thick + 2,
+                        color: rgb(80,60,20), opacity: 0.35
+                    });
+                    // corpo principale — colore legno chiaro
+                    drawLine({
+                        p1: vec2(px - this._hdx*len/2, py - this._hdy*len/2),
+                        p2: vec2(px + this._hdx*len/2, py + this._hdy*len/2),
+                        width: thick,
+                        color: rgb(220,195,140)
+                    });
+                    // riflesso centrale più chiaro
+                    drawLine({
+                        p1: vec2(px - this._hdx*len*0.3, py - this._hdy*len*0.3),
+                        p2: vec2(px + this._hdx*len*0.3, py + this._hdy*len*0.3),
+                        width: thick * 0.45,
+                        color: rgb(245,230,185)
+                    });
+                }
+            }]);
+        } else {
+            bulletSprites[b.id].pos=vec2(b.pos.x,b.pos.y);
+        }
     }
 }
 

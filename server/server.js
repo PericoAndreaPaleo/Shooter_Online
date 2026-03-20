@@ -23,12 +23,12 @@ if (RENDER_URL) {
 const map = { width: 5000, height: 5000 };
 const PLAYER_RADIUS = 20;
 const PLAYER_MAX_HP = 100;
-const DAMAGE_BY_WEAPON = { gun: 20, pistol: 15, fists: 0 };
+const DAMAGE_BY_WEAPON = { gun: 25, pistol: 15, fists: 0 };
 const COOLDOWN_BY_WEAPON = { gun: 100, pistol: 200, fists: 0 };
 const MAX_AMMO = { gun: 30, pistol: 15, fists: 0 };
 const RELOAD_TIME = { gun: 2000, pistol: 1500 };
-const SPEED = 250;
-const SPEED_PROIETTILE = 1500;
+const SPEED = 300;
+const SPEED_PROIETTILE = 1750;
 const BULLET_LIFETIME = 1.2;
 const MAX_PLAYERS = 8;
 const REJOIN_TTL = 5 * 60 * 1000; // 5 minuti per fare rejoin
@@ -297,23 +297,18 @@ function creaLobby(lobbyId, lobbyName, password) {
 
             broadcastLobbyList();
 
-            // Se vuota, pianifica cleanup dopo REJOIN_TTL
+            // Se vuota, cancella subito la lobby
             if (Object.keys(lobby.players).length === 0) {
+                // Piccolo delay per evitare race condition con rejoin immediato
                 lobby.cleanupTimer = setTimeout(() => {
-                    // Pulisci token scaduti
-                    const now = Date.now();
-                    for (const t in lobby.tokens) {
-                        if (lobby.tokens[t].expireAt < now) delete lobby.tokens[t];
-                    }
-                    if (Object.keys(lobby.players).length === 0 && Object.keys(lobby.tokens).length === 0) {
-                        // Rimuovi namespace e lobby
+                    if (lobbies[lobbyId] && Object.keys(lobby.players).length === 0) {
                         nsp.disconnectSockets(true);
                         io._nsps.delete("/lobby/" + lobbyId);
                         delete lobbies[lobbyId];
-                        console.log(`Lobby rimossa: ${lobbyId}`);
+                        console.log(`Lobby rimossa (vuota): ${lobbyId}`);
                         broadcastLobbyList();
                     }
-                }, REJOIN_TTL);
+                }, 3000); // 3 secondi di grazia per eventuali rejoin
             }
         });
     });
