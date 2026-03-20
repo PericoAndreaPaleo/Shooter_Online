@@ -25,9 +25,10 @@ const PLAYER_RADIUS = 20;
 const PLAYER_MAX_HP = 100;
 const DAMAGE_BY_WEAPON = { gun: 20, pistol: 15, fists: 0 };
 const COOLDOWN_BY_WEAPON = { gun: 120, pistol: 250, fists: 0 };
-const SPEED = 320;
-const SPEED_PROIETTILE = 1300;
-const BULLET_LIFETIME = 0.8;
+const MAX_AMMO = { gun: 30, pistol: 15, fists: 0 };
+const SPEED = 300;
+const SPEED_PROIETTILE = 1500;
+const BULLET_LIFETIME = 1.2;
 const MAX_PLAYERS = 8;
 const REJOIN_TTL = 5 * 60 * 1000; // 5 minuti per fare rejoin
 
@@ -206,6 +207,7 @@ function creaLobby(lobbyId, lobbyName, password) {
             if (!p) return;
             p.pos = spawnPos(lobby); p.hp = PLAYER_MAX_HP;
             p.morto = false; p.dir = { x: 0, y: 0 }; p.angle = 0;
+            p.ammo = { gun: MAX_AMMO.gun, pistol: MAX_AMMO.pistol };
         });
 
         socket.on("input", (input) => {
@@ -232,6 +234,10 @@ function creaLobby(lobbyId, lobbyName, password) {
         socket.on("shoot", (data) => {
             const p = lobby.players[socket.id];
             if (!p || p.morto || !data || typeof data.dir !== "object") return;
+            if (p.weapon === "fists") return;
+            // Controlla munizioni
+            if (!p.ammo) p.ammo = { gun: MAX_AMMO.gun, pistol: MAX_AMMO.pistol };
+            if (p.ammo[p.weapon] <= 0) return;
             const now = Date.now();
             if (now - p.lastShot < (COOLDOWN_BY_WEAPON[p.weapon] ?? 120)) return;
             p.lastShot = now;
@@ -242,6 +248,7 @@ function creaLobby(lobbyId, lobbyName, password) {
             const nx = dir.x / len, ny = dir.y / len;
             const ox = (tipOffset && Math.abs(tipOffset.x) < 100) ? tipOffset.x : 0;
             const oy = (tipOffset && Math.abs(tipOffset.y) < 100) ? tipOffset.y : 0;
+            p.ammo[p.weapon]--;
             lobby.proiettili.push({
                 id: lobby.nextBulletId++,
                 pos: { x: p.pos.x + ox, y: p.pos.y + oy },
@@ -428,6 +435,7 @@ setInterval(() => {
                     hp: p.hp, morto: p.morto, nickname: p.nickname,
                     angle: p.angle, weapon: p.weapon,
                     hitFlash: p.hitFlash || undefined,
+                    ammo: p.ammo || { gun: MAX_AMMO.gun, pistol: MAX_AMMO.pistol },
                 };
             }
             lobby.nsp.emit("state", {

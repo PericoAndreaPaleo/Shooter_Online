@@ -425,7 +425,7 @@ function connettiALobby(lobbyId, lobbyName, token) {
             if (o.type==="cespuglio") add([pos(o.x,o.y),anchor("center"),circle(o.r),color(rgb(100,200,40)),outline(2,rgb(60,140,20)),z(2)]);
         }
 
-        aggiornaHUDStats(); aggiornaHUDArma(); aggiornaHUDLobby(); aggiornaHUDPlayers(playerCount, maxPlayers);
+        aggiornaHUDStats(); aggiornaHUDArma(); aggiornaHUDLobby(); aggiornaHUDPlayers(playerCount, maxPlayers); aggiornaHUDAmmo();
         aggiornaBlackBars();
         creaGunDrawObj();
         onResize(() => { aggiornaHUDArma(); aggiornaHUDStats(); aggiornaHUDLobby(); });
@@ -534,8 +534,9 @@ function mostraMenu(sottotitolo) {
 // ========================
 const killFeedList = [];
 let killFeedObjs = [], leaderboardObjs = [];
-let hudKillsObj=null, hudWeaponObj=null, hudLobbyObj=null, hudPlayersObj=null;
+let hudKillsObj=null, hudWeaponObj=null, hudLobbyObj=null, hudPlayersObj=null, hudAmmoObj=null;
 let myKills=0, myDeaths=0;
+let myAmmo = { gun: 30, pistol: 15 };
 
 // Helper: converte coordinate 1280×720 → coordinate canvas reali (con letterbox)
 function hx(x) { const {scale,left} = calcolaLetterbox(); return left + x * scale; }
@@ -545,6 +546,16 @@ function hs(s) { const {scale}      = calcolaLetterbox(); return Math.round(s * 
 function aggiornaHUDArma() {
     if (hudWeaponObj) destroy(hudWeaponObj); if (isMobile()) return;
     hudWeaponObj = add([text(weapon==="gun"?"[1] Assalto  2: Pistola  3: Pugni":weapon==="pistol"?"1: Assalto  [2] Pistola  3: Pugni":"1: Assalto  2: Pistola  [3] Pugni",{size:hs(14)}), pos(hx(14),hy(GAME_H-52)), color(rgb(255,220,80)), fixed(), z(100)]);
+    aggiornaHUDAmmo();
+}
+function aggiornaHUDAmmo() {
+    if (hudAmmoObj) destroy(hudAmmoObj);
+    if (weapon === "fists") return;
+    const ammo = myAmmo[weapon] ?? 0;
+    const max  = weapon === "gun" ? 30 : 15;
+    const col  = ammo === 0 ? rgb(255,60,60) : ammo <= max*0.3 ? rgb(255,180,0) : rgb(255,255,255);
+    const label = isMobile() ? `${ammo}/${max}` : `${ammo}/${max} munizioni`;
+    hudAmmoObj = add([text(label,{size:hs(16)}), pos(hx(GAME_W-14),hy(GAME_H-30)), anchor("right"), color(col), fixed(), z(100)]);
 }
 function aggiornaHUDStats() {
     if (hudKillsObj) destroy(hudKillsObj);
@@ -600,9 +611,9 @@ window.addEventListener("keydown", e => {
     if (inMenu || inLobbyScreen) return;
     const dir = keyMap[e.key.toLowerCase()];
     if (dir && !input[dir]) { input[dir]=true; socket.emit("input",input); }
-    if (e.key==="1") { weapon="gun";    socket.emit("setWeapon","gun");    aggiornaHUDArma(); aggiornaWeaponBtns(); }
-    if (e.key==="2") { weapon="pistol"; socket.emit("setWeapon","pistol"); aggiornaHUDArma(); aggiornaWeaponBtns(); }
-    if (e.key==="3") { weapon="fists";  socket.emit("setWeapon","fists");  aggiornaHUDArma(); aggiornaWeaponBtns(); }
+    if (e.key==="1") { weapon="gun";    socket.emit("setWeapon","gun");    aggiornaHUDArma(); aggiornaWeaponBtns(); aggiornaHUDAmmo(); }
+    if (e.key==="2") { weapon="pistol"; socket.emit("setWeapon","pistol"); aggiornaHUDArma(); aggiornaWeaponBtns(); aggiornaHUDAmmo(); }
+    if (e.key==="3") { weapon="fists";  socket.emit("setWeapon","fists");  aggiornaHUDArma(); aggiornaWeaponBtns(); aggiornaHUDAmmo(); }
 });
 window.addEventListener("keyup", e => {
     if (inMenu || inLobbyScreen) return;
@@ -689,7 +700,7 @@ function creaTouchUI() {
             const bottomPx = Math.round(window.innerHeight - barTop + 8);
             btn.style.cssText=`position:fixed;left:${lp}px;bottom:${bottomPx}px;width:${bSize}px;height:${bSize}px;background:${w.color};color:white;font-size:10px;font-weight:bold;border:1px solid rgba(255,255,255,0.3);border-radius:4px;cursor:pointer;z-index:600;opacity:0.9;font-family:monospace;padding:0;line-height:${bSize}px;text-align:center;`;
             btn.addEventListener("touchstart", e=>{ e.preventDefault(); e.stopPropagation(); }, {passive:false});
-            btn.addEventListener("touchend",   e=>{ e.preventDefault(); e.stopPropagation(); weapon=w.key; socket.emit("setWeapon",w.key); aggiornaHUDArma(); aggiornaWeaponBtns(); }, {passive:false});
+            btn.addEventListener("touchend",   e=>{ e.preventDefault(); e.stopPropagation(); weapon=w.key; socket.emit("setWeapon",w.key); aggiornaHUDArma(); aggiornaWeaponBtns(); aggiornaHUDAmmo(); }, {passive:false});
             document.body.appendChild(btn); weaponBtns.push(btn);
         });
     }
@@ -880,6 +891,10 @@ function aggiornaStato(state) {
     }
     if(state.lb) aggiornaLeaderboard(state.lb);
     if(state.playerCount!==undefined) aggiornaHUDPlayers(state.playerCount,state.maxPlayers);
+    if(myId && state.players[myId] && state.players[myId].ammo){
+        const a=state.players[myId].ammo;
+        if(a.gun!==myAmmo.gun||a.pistol!==myAmmo.pistol){ myAmmo=a; aggiornaHUDAmmo(); }
+    }
 
     // Rimuovi player non più presenti
     for(const id in players){
@@ -942,27 +957,20 @@ function aggiornaStato(state) {
     for(const id in bulletSprites){if(!serverIds.has(Number(id))){destroy(bulletSprites[id]);delete bulletSprites[id];}}
     for(const b of state.proiettili){
         if(!bulletSprites[b.id]){
-            const len   = b.weapon==="pistol" ? 14 : 22;
-            const width = b.weapon==="pistol" ? 2.5 : 3.5;
-            const col   = b.weapon==="pistol" ? rgb(255,230,60) : rgb(255,70,70);
-            const dx = b.dir.x * len / 2;
-            const dy = b.dir.y * len / 2;
-            bulletSprites[b.id] = add([
-                pos(b.pos.x, b.pos.y),
-                z(3),
-                { _dx: dx, _dy: dy, _w: width, _col: col,
-                  draw() {
-                      drawLine({
-                          p1: vec2(this.pos.x - this._dx, this.pos.y - this._dy),
-                          p2: vec2(this.pos.x + this._dx, this.pos.y + this._dy),
-                          width: this._w,
-                          color: this._col,
-                      });
-                  }
+            const hdx = b.dir.x * 10, hdy = b.dir.y * 10; // metà lunghezza = 10 → linea 20px
+            bulletSprites[b.id]=add([pos(b.pos.x,b.pos.y), z(3), {
+                _hdx:hdx, _hdy:hdy,
+                draw(){
+                    drawLine({
+                        p1: vec2(this.pos.x-this._hdx, this.pos.y-this._hdy),
+                        p2: vec2(this.pos.x+this._hdx, this.pos.y+this._hdy),
+                        width: 3,
+                        color: rgb(255,200,0),
+                    });
                 }
-            ]);
+            }]);
         } else {
-            bulletSprites[b.id].pos = vec2(b.pos.x, b.pos.y);
+            bulletSprites[b.id].pos=vec2(b.pos.x,b.pos.y);
         }
     }
 }
