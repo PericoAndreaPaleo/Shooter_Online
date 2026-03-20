@@ -563,34 +563,29 @@ function hx(x) { const {scale,left} = calcolaLetterbox(); return left + x * scal
 function hy(y) { const {scale,top}  = calcolaLetterbox(); return top  + y * scale; }
 function hs(s) { const {scale}      = calcolaLetterbox(); return Math.round(s * scale); }
 
-// Disegna un riquadro arrotondato + testo — tutto in un unico oggetto Kaboom
-function hudBox(testo, px, py, opts={}) {
-    const pad = opts.pad ?? 8;
-    const sz  = opts.size ?? 14;
-    const textCol  = opts.textCol  ?? rgb(255,255,255);
-    const boxCol   = opts.boxCol   ?? rgb(0,0,0);
-    const boxAlpha = opts.boxAlpha ?? 0.55;
-    const radius   = opts.radius   ?? 6;
-    const anchor_  = opts.anchor   ?? "topleft";
-    return add([pos(px,py), fixed(), z(100), {
-        _text: testo, _sz: sz, _pad: pad,
-        _textCol: textCol, _boxCol: boxCol, _boxAlpha: boxAlpha, _r: radius, _anchor: anchor_,
+// hudBox — ricalcola posizione ogni frame tramite draw() → sempre responsive
+function hudBox(getX, getY, getText, opts={}) {
+    // getX/getY possono essere funzioni o valori fissi
+    const gx = typeof getX === "function" ? getX : () => getX;
+    const gy = typeof getY === "function" ? getY : () => getY;
+    const gt = typeof getText === "function" ? getText : () => getText;
+    const pad_    = opts.pad    ?? 6;
+    const size_   = opts.size   ?? 13;
+    const textCol = opts.textCol  ?? rgb(220,220,220);
+    const boxCol  = opts.boxCol   ?? rgb(0,0,0);
+    const alpha_  = opts.boxAlpha ?? 0.45;
+    const r_      = opts.radius   ?? 4;
+    return add([fixed(), z(100), {
         draw() {
-            // misura testo approssimativamente (kaboom non ha measureText facile, usiamo stima)
-            const charW = this._sz * 0.6;
-            const tw = this._text.length * charW;
-            const th = this._sz * 1.2;
-            let bx = this.pos.x, by = this.pos.y;
-            if (this._anchor === "right")  bx -= tw + this._pad * 2;
-            if (this._anchor === "center") bx -= tw / 2 + this._pad;
-            // sfondo
-            drawRect({ pos: vec2(bx - this._pad, by - this._pad),
-                width: tw + this._pad*2, height: th + this._pad*2,
-                radius: this._r,
-                color: this._boxCol, opacity: this._boxAlpha });
-            // testo
-            drawText({ text: this._text, pos: vec2(bx, by),
-                size: this._sz, color: this._textCol });
+            const px = gx(), py = gy(), text = gt();
+            const sz  = typeof size_ === "function" ? size_() : size_;
+            const pad = typeof pad_  === "function" ? pad_()  : pad_;
+            const tw  = text.length * sz * 0.58;
+            const th  = sz * 1.3;
+            drawRect({ pos: vec2(px - pad, py - pad*0.5),
+                width: tw + pad*2, height: th + pad,
+                radius: r_, color: boxCol, opacity: alpha_ });
+            drawText({ text, pos: vec2(px, py), size: sz, color: textCol });
         }
     }]);
 }
@@ -699,20 +694,29 @@ function aggiornaHUDAmmo() {
 
 function aggiornaHUDStats() {
     if (hudKillsObj) destroy(hudKillsObj);
-    hudKillsObj = hudBox(`K: ${myKills}  D: ${myDeaths}`, hx(14), hy(GAME_H-30),
-        { size:hs(14), textCol:HUD_TEXT, boxCol:HUD_BOX, boxAlpha:HUD_ALPHA, pad:hs(6), radius:HUD_RADIUS });
+    hudKillsObj = hudBox(
+        () => hx(10), () => hy(GAME_H-28),
+        () => `K: ${myKills}  D: ${myDeaths}`,
+        { size:()=>hs(14), textCol:HUD_TEXT, boxCol:HUD_BOX, boxAlpha:HUD_ALPHA, pad:()=>hs(6), radius:HUD_RADIUS }
+    );
 }
 
 function aggiornaHUDLobby() {
     if (hudLobbyObj) destroy(hudLobbyObj); if (!myLobbyName) return;
-    hudLobbyObj = hudBox(`Lobby: ${myLobbyName}`, hx(10), hy(10),
-        { size:hs(11), textCol:HUD_TEXT_DIM, boxCol:HUD_BOX, boxAlpha:0.35, pad:hs(5), radius:HUD_RADIUS });
+    hudLobbyObj = hudBox(
+        () => hx(10), () => hy(10),
+        () => `Lobby: ${myLobbyName}`,
+        { size:()=>hs(11), textCol:rgb(230,230,230), boxCol:HUD_BOX, boxAlpha:0.55, pad:()=>hs(5), radius:HUD_RADIUS }
+    );
 }
 
 function aggiornaHUDPlayers(count, max) {
     if (hudPlayersObj) destroy(hudPlayersObj);
-    hudPlayersObj = hudBox(`Players: ${count}/${max}`, hx(10), hy(32),
-        { size:hs(11), textCol:HUD_TEXT_DIM, boxCol:HUD_BOX, boxAlpha:0.35, pad:hs(5), radius:HUD_RADIUS });
+    hudPlayersObj = hudBox(
+        () => hx(10), () => hy(28),
+        () => `Players: ${count}/${max}`,
+        { size:()=>hs(11), textCol:rgb(230,230,230), boxCol:HUD_BOX, boxAlpha:0.55, pad:()=>hs(5), radius:HUD_RADIUS }
+    );
 }
 
 // Bande nere letterbox disegnate dentro Kaboom (z altissimo, fixed)
@@ -744,31 +748,32 @@ function mostraKillFeed(msg) {
 function aggiornaLeaderboard(lb) {
     for (const o of leaderboardObjs) destroy(o); leaderboardObjs = [];
     if (!lb || !lb.length) return;
-    // Un singolo oggetto che disegna tutto il pannello classifica
     leaderboardObjs.push(add([fixed(), z(100), {
         draw() {
-            const sz = hs(12), pad = hs(6), rowH = hs(18), titleSz = hs(11);
+            const sz = hs(12), pad = hs(6), rowH = hs(19), titleSz = hs(10);
             const panelW = hs(160);
             const panelH = hs(16) + lb.length * rowH + pad;
             const bx = hx(GAME_W - 10) - panelW;
             const by = hy(10);
-            // sfondo pannello unico
+            // sfondo pannello — più opaco per leggibilità sulla sabbia
             drawRect({ pos: vec2(bx, by), width: panelW, height: panelH,
-                radius: hs(4), color: rgb(0,0,0), opacity: 0.45 });
+                radius: hs(4), color: rgb(0,0,0), opacity: 0.65 });
+            // bordo sottile
+            drawRect({ pos: vec2(bx, by), width: panelW, height: hs(1),
+                color: rgb(200,200,200), opacity: 0.3 });
             // titolo
-            drawText({ text: "LEADERBOARD", pos: vec2(bx + pad, by + pad*0.5),
-                size: titleSz, color: rgb(160,160,160) });
-            // righe giocatori
+            drawText({ text: "LEADERBOARD", pos: vec2(bx + pad, by + pad*0.6),
+                size: titleSz, color: rgb(200,200,200) });
             lb.forEach((e, i) => {
                 const ry = by + hs(16) + i * rowH;
-                // separatore leggero
                 if (i > 0) drawRect({ pos: vec2(bx + pad, ry), width: panelW - pad*2, height: hs(1),
-                    color: rgb(255,255,255), opacity: 0.06 });
-                const col = i === 0 ? rgb(240,240,240) : rgb(160,160,160);
+                    color: rgb(255,255,255), opacity: 0.08 });
+                const col = i === 0 ? rgb(255,255,255) : rgb(190,190,190);
                 const nameStr = `${i+1}. ${e.nickname}`;
                 const killStr = `${e.kills}K`;
                 drawText({ text: nameStr, pos: vec2(bx + pad, ry + hs(3)), size: sz, color: col });
-                drawText({ text: killStr, pos: vec2(bx + panelW - pad - killStr.length*sz*0.58, ry + hs(3)),
+                drawText({ text: killStr,
+                    pos: vec2(bx + panelW - pad - killStr.length*sz*0.58, ry + hs(3)),
                     size: sz, color: col });
             });
         }
