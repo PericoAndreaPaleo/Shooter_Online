@@ -668,18 +668,16 @@ function aggiornaHUDArma() {
     const keys  = ["gun","pistol","fists"];
     hudWeaponObj = add([fixed(), z(100), {
         draw() {
-            const sz = hs(12), pad = hs(6), gap = hs(4);
+            const sz = hs(16), pad = hs(8), gap = hs(5);
             let cx = hx(10);
-            const by = hy(GAME_H - 52);
+            const by = hy(GAME_H - 46);
             for (const k of keys) {
                 const label = names[k];
                 const tw = label.length * sz * 0.58 + pad*2;
                 const th = sz * 1.5 + pad;
                 const active = k === weapon;
-                // box più opaco se attivo
                 drawRect({ pos: vec2(cx, by), width: tw, height: th,
                     radius: hs(4), color: rgb(0,0,0), opacity: active ? 0.7 : 0.3 });
-                // bordo sottile in alto se attivo
                 if (active) drawRect({ pos: vec2(cx, by), width: tw, height: hs(2),
                     color: rgb(220,220,220), opacity: 0.9 });
                 drawText({ text: label, pos: vec2(cx + pad, by + pad*0.6),
@@ -757,28 +755,32 @@ function aggiornaHUDAmmo() {
 
 function aggiornaHUDStats() {
     if (hudKillsObj) destroy(hudKillsObj);
+    // Posizionato in basso a sinistra, sopra il selettore armi (che sta a GAME_H-52)
+    // GAME_H - 90 lascia spazio sufficiente tra le due righe
     hudKillsObj = hudBox(
-        () => hx(10), () => hy(GAME_H-26),
+        () => hx(10), () => hy(GAME_H - 90),
         () => `K: ${myKills}  D: ${myDeaths}`,
-        { size:()=>hs(14), textCol:HUD_TEXT, boxCol:HUD_BOX, boxAlpha:HUD_ALPHA, pad:()=>hs(6), radius:HUD_RADIUS }
+        { size:()=>hs(18), textCol:HUD_TEXT, boxCol:HUD_BOX, boxAlpha:HUD_ALPHA, pad:()=>hs(7), radius:HUD_RADIUS }
     );
 }
 
 function aggiornaHUDLobby() {
     if (hudLobbyObj) destroy(hudLobbyObj); if (!myLobbyName) return;
+    // Riga 1 in alto a sinistra
     hudLobbyObj = hudBox(
         () => hx(10), () => hy(10),
         () => `Lobby: ${myLobbyName}`,
-        { size:()=>hs(11), textCol:rgb(230,230,230), boxCol:HUD_BOX, boxAlpha:0.55, pad:()=>hs(5), radius:HUD_RADIUS }
+        { size:()=>hs(15), textCol:rgb(230,230,230), boxCol:HUD_BOX, boxAlpha:0.55, pad:()=>hs(6), radius:HUD_RADIUS }
     );
 }
 
 function aggiornaHUDPlayers(count, max) {
     if (hudPlayersObj) destroy(hudPlayersObj);
+    // Riga 2 in alto a sinistra — abbassata di 36px rispetto alla lobby label
     hudPlayersObj = hudBox(
-        () => hx(10), () => hy(34),
+        () => hx(10), () => hy(46),
         () => `Players: ${count}/${max}`,
-        { size:()=>hs(11), textCol:rgb(230,230,230), boxCol:HUD_BOX, boxAlpha:0.55, pad:()=>hs(5), radius:HUD_RADIUS }
+        { size:()=>hs(15), textCol:rgb(230,230,230), boxCol:HUD_BOX, boxAlpha:0.55, pad:()=>hs(6), radius:HUD_RADIUS }
     );
 }
 
@@ -813,9 +815,9 @@ function aggiornaLeaderboard(lb) {
     if (!lb || !lb.length) return;
     leaderboardObjs.push(add([fixed(), z(100), {
         draw() {
-            const sz = hs(12), pad = hs(6), rowH = hs(19), titleSz = hs(10);
-            const panelW = hs(160);
-            const panelH = hs(16) + lb.length * rowH + pad;
+            const sz = hs(15), pad = hs(7), rowH = hs(24), titleSz = hs(13);
+            const panelW = hs(190);
+            const panelH = hs(20) + lb.length * rowH + pad;
             const bx = hx(GAME_W - 10) - panelW;
             const by = hy(10);
             // sfondo pannello — più opaco per leggibilità sulla sabbia
@@ -1124,7 +1126,6 @@ function fireLoop(){
         if(n-lastPistolShot>=cooldown){
             shootTouchJoy();
             lastPistolShot=n;
-            }
         }
     }
     requestAnimationFrame(fireLoop);
@@ -1150,7 +1151,7 @@ onUpdate(()=>{
     for(let i=killFeedList.length-1;i>=0;i--){
         killFeedList[i].timer-=dt();
         if(killFeedList[i].timer<=0){killFeedList.splice(i,1);continue;}
-        killFeedObjs.push(add([text(killFeedList[i].msg,{size:hs(15)}),pos(hx(GAME_W/2),hy(GAME_H-60-(killFeedList.length-1-i)*22)),anchor("center"),color(rgb(255,220,80)),opacity(Math.min(1,killFeedList[i].timer)),fixed(),z(100)]));
+        killFeedObjs.push(add([text(killFeedList[i].msg,{size:hs(18)}),pos(hx(GAME_W/2),hy(GAME_H-80-(killFeedList.length-1-i)*28)),anchor("center"),color(rgb(255,220,80)),opacity(Math.min(1,killFeedList[i].timer)),fixed(),z(100)]));
     }
 });
 
@@ -1186,7 +1187,7 @@ function aggiornaStato(state) {
         if(!players[id]){
             if(s.morto)continue;
             const sprite=add([pos(s.pos.x,s.pos.y),anchor("center"),circle(24),color(rgb(222,196,145)),outline(4,rgb(0,0,0)),z(1)]);
-            const labelObj=isMe?add([pos(s.pos.x,s.pos.y-40),anchor("center"),text(myNickname||"TU",{size:13}),color(rgb(0,220,255)),z(5)]):null;
+            const labelObj=isMe?add([pos(s.pos.x,s.pos.y-40),anchor("center"),text(myNickname||"TU",{size:17}),color(rgb(0,220,255)),z(5)]):null;
             const hpBar=isMe?add([fixed(),z(200),{_disp:s.hp,draw(){
                 const bx=hx(GAME_W/2-150),by=hy(GAME_H-44),r=4,W=hs(300),H=hs(20);
                 drawRect({pos:vec2(bx-2,by-2),width:W+4,height:H+4,radius:r+1,color:rgb(30,30,30)});
@@ -1235,39 +1236,45 @@ function aggiornaStato(state) {
     // Proiettili
     const serverIds=new Set(state.proiettili.map(b=>b.id));
     for(const id in bulletSprites){if(!serverIds.has(Number(id))){destroy(bulletSprites[id]);delete bulletSprites[id];}}
+    const nowBullet = Date.now();
     for(const b of state.proiettili){
         if(!bulletSprites[b.id]){
-            const hdx = b.dir.x, hdy = b.dir.y; // dir già normalizzato
+            const hdx = b.dir.x, hdy = b.dir.y;
             bulletSprites[b.id]=add([pos(b.pos.x,b.pos.y), z(3), {
                 _hdx: hdx, _hdy: hdy,
+                _born: nowBullet,
                 draw(){
+                    // In Kaboom il draw() custom usa coordinate locali (origine = this.pos).
+                    // Usiamo vec2(0,0) come centro — il motore applica la traslazione al pos().
                     const len = 18, thick = 3.5;
-                    const px = this.pos.x, py = this.pos.y;
-                    // ombra sottile
                     drawLine({
-                        p1: vec2(px - this._hdx*(len/2+1), py - this._hdy*(len/2+1)),
-                        p2: vec2(px + this._hdx*(len/2+1), py + this._hdy*(len/2+1)),
+                        p1: vec2(-this._hdx*(len/2+1), -this._hdy*(len/2+1)),
+                        p2: vec2( this._hdx*(len/2+1),  this._hdy*(len/2+1)),
                         width: thick + 2,
                         color: rgb(80,60,20), opacity: 0.35
                     });
-                    // corpo principale — colore legno chiaro
                     drawLine({
-                        p1: vec2(px - this._hdx*len/2, py - this._hdy*len/2),
-                        p2: vec2(px + this._hdx*len/2, py + this._hdy*len/2),
+                        p1: vec2(-this._hdx*len/2, -this._hdy*len/2),
+                        p2: vec2( this._hdx*len/2,  this._hdy*len/2),
                         width: thick,
                         color: rgb(220,195,140)
                     });
-                    // riflesso centrale più chiaro
                     drawLine({
-                        p1: vec2(px - this._hdx*len*0.3, py - this._hdy*len*0.3),
-                        p2: vec2(px + this._hdx*len*0.3, py + this._hdy*len*0.3),
+                        p1: vec2(-this._hdx*len*0.3, -this._hdy*len*0.3),
+                        p2: vec2( this._hdx*len*0.3,  this._hdy*len*0.3),
                         width: thick * 0.45,
                         color: rgb(245,230,185)
                     });
                 }
             }]);
         } else {
-            bulletSprites[b.id].pos=vec2(b.pos.x,b.pos.y);
+            // Rimuovi proiettile dopo 0.5 secondi dalla creazione (client-side)
+            if(nowBullet - bulletSprites[b.id]._born >= 500){
+                destroy(bulletSprites[b.id]);
+                delete bulletSprites[b.id];
+            } else {
+                bulletSprites[b.id].pos=vec2(b.pos.x,b.pos.y);
+            }
         }
     }
 }
