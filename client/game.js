@@ -8,6 +8,7 @@ import {
     aggiornaLeaderboard, mostraKillFeed, killFeedList, killFeedObjs
 } from "./hud.js";
 import { aggiornaWeaponBtns, aggiornaReloadBtn, creaTouchUI } from "./touch.js";
+import { triggerSlash } from "./weapons.js";
 
 let _distruggiUI   = null;
 let _mostraMenu    = null;
@@ -63,7 +64,8 @@ export function shoot() {
     const tipDist = state.weapon === "fists" ? 0 : 24 + (state.weapon === "pistol" ? 10 : 40);
     state.socket.emit("aim",   angle);
     state.socket.emit("shoot", { dir, tipOffset: { x: nx * tipDist, y: ny * tipDist } });
-    if (state.weapon !== "fists") playShootSound(); else playKnifeSound();
+    if (state.weapon !== "fists") playShootSound();
+    else { playKnifeSound(); const me2 = state.players[state.myId]; if (me2 && me2.sprite) triggerSlash(me2.sprite.pos.x, me2.sprite.pos.y, angle); }
 }
 
 function shootTouchJoy() {
@@ -73,7 +75,8 @@ function shootTouchJoy() {
     if (!nx && !ny) return;
     const tipDist = state.weapon === "fists" ? 0 : 24 + (state.weapon === "pistol" ? 10 : 40);
     state.socket.emit("shoot", { dir: { x: nx, y: ny }, tipOffset: { x: nx * tipDist, y: ny * tipDist } });
-    if (state.weapon !== "fists") playShootSound(); else playKnifeSound();
+    if (state.weapon !== "fists") playShootSound();
+    else { playKnifeSound(); const me2 = state.players[state.myId]; if (me2 && me2.sprite) triggerSlash(me2.sprite.pos.x, me2.sprite.pos.y, state.aimJoyAngle); }
 }
 
 export function registraEventiSparo(canvas) {
