@@ -230,6 +230,12 @@ function creaLobby(lobbyId, lobbyName, password) {
         socket.on("setWeapon", (w) => {
             const p = lobby.players[socket.id];
             if (!p || !["gun","pistol","fists"].includes(w)) return;
+            // Se si cambia arma durante una ricarica, annullala
+            if (p.reloading && p.weapon !== w) {
+                p.reloading = false;
+                if (p.reloadTimer) { clearTimeout(p.reloadTimer); p.reloadTimer = null; }
+                socket.emit("reloadCancelled", { weapon: p.weapon });
+            }
             p.weapon = w;
         });
 
@@ -240,13 +246,17 @@ function creaLobby(lobbyId, lobbyName, password) {
             if (p.ammo[p.weapon] >= MAX_AMMO[p.weapon]) return;
             if (p.reloading) return;
             p.reloading = true;
-            socket.emit("reloadStart", { weapon: p.weapon, duration: RELOAD_TIME[p.weapon] });
-            setTimeout(() => {
+            const weaponAlReload = p.weapon;
+            socket.emit("reloadStart", { weapon: weaponAlReload, duration: RELOAD_TIME[weaponAlReload] });
+            p.reloadTimer = setTimeout(() => {
                 if (!p || !lobby.players[socket.id]) return;
-                p.ammo[p.weapon] = MAX_AMMO[p.weapon];
+                // Completa solo se il player ha ancora la stessa arma
+                if (p.weapon !== weaponAlReload) return;
+                p.ammo[weaponAlReload] = MAX_AMMO[weaponAlReload];
                 p.reloading = false;
-                socket.emit("reloadDone", { weapon: p.weapon });
-            }, RELOAD_TIME[p.weapon]);
+                p.reloadTimer = null;
+                socket.emit("reloadDone", { weapon: weaponAlReload });
+            }, RELOAD_TIME[weaponAlReload]);
         });
 
         socket.on("shoot", (data) => {
