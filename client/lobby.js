@@ -9,7 +9,7 @@ let _setHtmlContainer = null;
 let _nascondiElementiHTML = null;
 let _connettiALobby = null;
 
-export let lobbyListData = [];
+let lobbyListData = [];
 
 export function initLobby(uiLayer, distruggiUI, nascondiElementiHTML, setHtmlContainer, connettiALobby) {
     _uiLayer            = uiLayer;
@@ -109,7 +109,7 @@ export function mostraSchermataLobby(errorMsg) {
     setTimeout(() => nameInput.focus(), 50);
 }
 
-export function renderLobbyList(container, list, S = 1) {
+function renderLobbyList(container, list, S = 1) {
     const fs = (n) => `${Math.max(10, Math.round(n * S))}px`;
     container.innerHTML = "";
     if (!list || !list.length) {

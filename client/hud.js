@@ -3,25 +3,22 @@
 // ========================
 import { state, GAME_W, GAME_H, hx, hy, hs, calcolaLetterbox, isMobile } from "./state.js";
 
-const HUD_BOX     = () => rgb(0, 0, 0);
 const HUD_ALPHA   = 0.45;
-const HUD_TEXT    = () => rgb(220, 220, 220);
 const HUD_RADIUS  = 4;
 
 export const killFeedList = [];
 export let killFeedObjs   = [];
-export let leaderboardObjs = [];
+let leaderboardObjs = [];
 
-export let hudKillsObj   = null;
-export let hudWeaponObj  = null;
-export let hudLobbyObj   = null;
-export let hudPlayersObj = null;
-export let hudAmmoObj    = null;
-export let hudReloadObj  = null;
-export let blackBarsObj  = null;
+let hudKillsObj   = null;
+let hudWeaponObj  = null;
+let hudLobbyObj   = null;
+let hudPlayersObj = null;
+let hudAmmoObj    = null;
+let blackBarsObj  = null;
 
 // hudBox — ricalcola posizione ogni frame tramite draw()
-export function hudBox(getX, getY, getText, opts = {}) {
+function hudBox(getX, getY, getText, opts = {}) {
     const gx = typeof getX === "function" ? getX : () => getX;
     const gy = typeof getY === "function" ? getY : () => getY;
     const gt = typeof getText === "function" ? getText : () => getText;

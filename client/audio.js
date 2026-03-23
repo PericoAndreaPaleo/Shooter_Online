@@ -8,7 +8,7 @@ const getAudio = () => {
     return audioCtx;
 };
 
-export function playSound(type, freq, endFreq, duration, waveType = "square") {
+function playSound(type, freq, endFreq, duration, waveType = "square") {
     try {
         const ctx = getAudio();
         const osc = ctx.createOscillator(), gain = ctx.createGain();

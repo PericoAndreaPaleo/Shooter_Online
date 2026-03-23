@@ -66,7 +66,7 @@ export function shoot() {
     if (state.weapon !== "fists") playShootSound(); else playKnifeSound();
 }
 
-export function shootTouchJoy() {
+function shootTouchJoy() {
     if (state.inMenu || state.inLobbyScreen || !state.socket || !state.myId || !state.players[state.myId] || state.players[state.myId].morto) return;
     if (!state.aimJoyActive) return;
     const nx = state.aimJoyDir.x, ny = state.aimJoyDir.y;

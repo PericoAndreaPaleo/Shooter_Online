@@ -186,7 +186,7 @@ function connettiALobby(lobbyId, lobbyName, token) {
 // ========================
 // INIT MODULI (inietta dipendenze circolari via funzione)
 // ========================
-initMenu(uiLayer, nascondiElementiHTML, distruggiUI, () => htmlContainer, setHtmlContainer);
+initMenu(uiLayer, nascondiElementiHTML, distruggiUI, setHtmlContainer);
 initLobby(uiLayer, distruggiUI, nascondiElementiHTML, setHtmlContainer, connettiALobby);
 initGame(distruggiUI, mostraMenu);
 

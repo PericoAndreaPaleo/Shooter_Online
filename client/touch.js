@@ -9,8 +9,8 @@ const JOYSTICK_R = 35, KNOB_R = 14, DEAD_ZONE = 8;
 let moveJoyEl = null, moveJoyTouchId = null, moveJoyCenter = { x: 0, y: 0 };
 let aimJoyEl  = null, aimJoyTouchId  = null, aimJoyCenter  = { x: 0, y: 0 };
 
-export let weaponBtns = [];
-export let reloadBtn  = null;
+let weaponBtns = [];
+let reloadBtn  = null;
 
 export function aggiornaWeaponBtns() {
     weaponBtns.forEach(b => {

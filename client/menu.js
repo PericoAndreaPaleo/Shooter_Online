@@ -7,10 +7,9 @@ import { state, GAME_W, GAME_H, hx, hy, hs, calcolaLetterbox } from "./state.js"
 let _uiLayer = null;
 let _nascondiElementiHTML = null;
 let _distruggiUI = null;
-let _htmlContainer = null;
 let _setHtmlContainer = null;
 
-export function initMenu(uiLayer, nascondiElementiHTML, distruggiUI, getHtmlContainer, setHtmlContainer) {
+export function initMenu(uiLayer, nascondiElementiHTML, distruggiUI, setHtmlContainer) {
     _uiLayer = uiLayer;
     _nascondiElementiHTML = nascondiElementiHTML;
     _distruggiUI = distruggiUI;
