@@ -5,13 +5,80 @@ import { state } from "./state.js";
 
 let gunDrawObj = null;
 
-// Array degli slash attivi: { x, y, angle, startTime, duration }
+// Slash attivi: { x, y, angle, startTime }
+// L'animazione dura 250ms — la mano avanza e torna
 const slashList = [];
-const SLASH_DURATION = 800; // ms — uguale al cooldown fists sul server
+const SLASH_DURATION = 250;
 
-// Chiamata da game.js ogni volta che il player attacca con il coltello
 export function triggerSlash(x, y, angle) {
-    slashList.push({ x, y, angle, startTime: performance.now(), duration: SLASH_DURATION });
+    slashList.push({ x, y, angle, startTime: performance.now() });
+}
+
+// Disegna il coltello da combattimento blu/cyan con outline nero chiuso
+// ox, oy = offset di posizione (usato per l'animazione slash)
+function drawKnife(cx, cy, angle, perp, ox, oy) {
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+
+    // Tutti i punti sono relativi al centro (cx+ox, cy+oy)
+    const bx = cx + ox, by = cy + oy;
+
+    // ── MANICO ──
+    // Va da 0 a +20 nella direzione dell'angolo
+    const hS = { x: bx,           y: by           };
+    const hE = { x: bx + cos*20,  y: by + sin*20  };
+
+    // Pomolo (fondo manico) — quadrato arrotondato
+    drawCircle({ pos: vec2(hS.x - cos*5, hS.y - sin*5), radius: 6,   color: rgb(0,  0,  0)  });
+    drawCircle({ pos: vec2(hS.x - cos*5, hS.y - sin*5), radius: 4.5, color: rgb(15, 45, 140) });
+
+    // Outline manico
+    drawLine({ p1: vec2(hS.x, hS.y), p2: vec2(hE.x, hE.y), width: 11, color: rgb(0, 0, 0) });
+    // Corpo manico blu
+    drawLine({ p1: vec2(hS.x, hS.y), p2: vec2(hE.x, hE.y), width: 7,  color: rgb(25, 70, 175) });
+    // Riflesso manico
+    drawLine({
+        p1: vec2(hS.x + perp.x*1.5 + cos*2, hS.y + perp.y*1.5 + sin*2),
+        p2: vec2(hE.x + perp.x*1.5 - cos*2, hE.y + perp.y*1.5 - sin*2),
+        width: 2, color: rgb(90, 140, 235)
+    });
+
+    // ── GUARDIA A CROCE ──
+    const gx = hE.x, gy = hE.y;
+    // Outline guardia (croce nera spessa)
+    drawLine({ p1: vec2(gx + perp.x*13, gy + perp.y*13), p2: vec2(gx - perp.x*13, gy - perp.y*13), width: 10, color: rgb(0, 0, 0) });
+    drawLine({ p1: vec2(gx - cos*5, gy - sin*5), p2: vec2(gx + cos*5, gy + sin*5), width: 10, color: rgb(0, 0, 0) });
+    // Corpo guardia
+    drawLine({ p1: vec2(gx + perp.x*11, gy + perp.y*11), p2: vec2(gx - perp.x*11, gy - perp.y*11), width: 6, color: rgb(10, 10, 15) });
+    drawLine({ p1: vec2(gx - cos*4, gy - sin*4), p2: vec2(gx + cos*4, gy + sin*4), width: 6, color: rgb(10, 10, 15) });
+
+    // ── LAMA ──
+    // Parte dalla guardia (+cos*2), lunga 40px, si assottiglia a punta
+    const blS = { x: gx + cos*3,  y: gy + sin*3  };
+    const blT = { x: gx + cos*43, y: gy + sin*43 }; // punta
+    const blM = { x: gx + cos*23, y: gy + sin*23 }; // metà
+
+    // Outline lama (chiuso = disegno i bordi come linee separate convergenti)
+    // Bordo superiore: da blS+perp*4 → blT
+    drawLine({ p1: vec2(blS.x + perp.x*4.5, blS.y + perp.y*4.5), p2: vec2(blT.x, blT.y), width: 3, color: rgb(0, 0, 0) });
+    // Bordo inferiore: da blS-perp*4 → blT
+    drawLine({ p1: vec2(blS.x - perp.x*4.5, blS.y - perp.y*4.5), p2: vec2(blT.x, blT.y), width: 3, color: rgb(0, 0, 0) });
+    // Base della lama (linea perpendicolare alla guardia)
+    drawLine({ p1: vec2(blS.x + perp.x*4.5, blS.y + perp.y*4.5), p2: vec2(blS.x - perp.x*4.5, blS.y - perp.y*4.5), width: 3, color: rgb(0, 0, 0) });
+
+    // Riempimento lama azzurro
+    drawLine({ p1: vec2(blS.x, blS.y), p2: vec2(blT.x, blT.y), width: 7, color: rgb(55, 155, 225) });
+    // Riflesso chiaro superiore
+    drawLine({ p1: vec2(blS.x + perp.x*3, blS.y + perp.y*3), p2: vec2(blT.x, blT.y), width: 4, color: rgb(140, 215, 255) });
+    // Riflesso brillante centrale
+    drawLine({ p1: vec2(blM.x + perp.x*2, blM.y + perp.y*2), p2: vec2(blT.x, blT.y), width: 2, color: rgb(215, 242, 255) });
+    // Filo inferiore scuro
+    drawLine({ p1: vec2(blS.x - perp.x*3, blS.y - perp.y*3), p2: vec2(blT.x, blT.y), width: 2.5, color: rgb(30, 105, 190) });
+
+    // Buco nella lama
+    const holeX = blS.x + cos*26 + perp.x*1.5;
+    const holeY = blS.y + sin*26 + perp.y*1.5;
+    drawCircle({ pos: vec2(holeX, holeY), radius: 4.5, color: rgb(0,  0,  0)  });
+    drawCircle({ pos: vec2(holeX, holeY), radius: 3,   color: rgb(25, 85, 170) });
 }
 
 export function creaGunDrawObj() {
@@ -20,49 +87,8 @@ export function creaGunDrawObj() {
         draw() {
             if (state.inMenu || state.inLobbyScreen || !state.myId) return;
 
-            // ── Disegna slash attivi ──
             const now = performance.now();
-            for (let i = slashList.length - 1; i >= 0; i--) {
-                const sl = slashList[i];
-                const elapsed = now - sl.startTime;
-                if (elapsed >= sl.duration) { slashList.splice(i, 1); continue; }
 
-                const t       = elapsed / sl.duration;       // 0→1
-                const opacity = 1 - t;                       // sfuma
-                const radius  = 28 + t * 22;                 // si espande
-                // Arco di slash: da -60° a +60° rispetto alla direzione di attacco
-                const arcStart = sl.angle - Math.PI * 0.45;
-                const arcEnd   = sl.angle + Math.PI * 0.45;
-                const steps    = 12;
-                for (let j = 0; j < steps; j++) {
-                    const a1 = arcStart + (arcEnd - arcStart) * (j / steps);
-                    const a2 = arcStart + (arcEnd - arcStart) * ((j + 1) / steps);
-                    // Colore: cyan/azzurro come il coltello, sfuma
-                    const alpha = opacity * (1 - j / steps * 0.3);
-                    drawLine({
-                        p1: vec2(sl.x + Math.cos(a1) * (radius - 4), sl.y + Math.sin(a1) * (radius - 4)),
-                        p2: vec2(sl.x + Math.cos(a2) * radius,       sl.y + Math.sin(a2) * radius),
-                        width: Math.max(1, (1 - t) * 5),
-                        color: rgb(80, 200, 255),
-                        opacity: alpha,
-                    });
-                }
-                // Secondo arco interno più luminoso
-                const r2 = radius * 0.65;
-                for (let j = 0; j < steps - 2; j++) {
-                    const a1 = arcStart + (arcEnd - arcStart) * (j / (steps - 2));
-                    const a2 = arcStart + (arcEnd - arcStart) * ((j + 1) / (steps - 2));
-                    drawLine({
-                        p1: vec2(sl.x + Math.cos(a1) * r2, sl.y + Math.sin(a1) * r2),
-                        p2: vec2(sl.x + Math.cos(a2) * r2, sl.y + Math.sin(a2) * r2),
-                        width: Math.max(1, (1 - t) * 2.5),
-                        color: rgb(200, 240, 255),
-                        opacity: opacity * 0.7,
-                    });
-                }
-            }
-
-            // ── Disegna armi e mani di tutti i player ──
             for (const id in state.players) {
                 const p = state.players[id];
                 if (!p || p.morto || !p.dirIndicator || !p.sprite) continue;
@@ -80,67 +106,41 @@ export function creaGunDrawObj() {
                 };
 
                 if (wtype === "fists") {
-                    // ══════════════════════════════════════════════════
-                    // COLTELLO — stile azzurro/cyan come nell'immagine
-                    // Tenuto nella mano destra (+perp)
-                    // ══════════════════════════════════════════════════
+                    // ══════════════════════════════════════════
+                    // Mano destra regge il coltello (+perp)
+                    // Mano sinistra è sul lato -perp
+                    // Per lo slash: la mano destra avanza verso la punta
+                    // ══════════════════════════════════════════
 
-                    // Posizione mano destra (tiene il coltello)
-                    const handX = px + cos * (R + 2) + perp.x * 10;
-                    const handY = py + sin * (R + 2) + perp.y * 10;
+                    // Calcola offset slash per questa posizione
+                    // Cerca se c'è uno slash attivo per questo player
+                    let slashOffset = 0;
+                    if (id === state.myId && slashList.length > 0) {
+                        // Prendi l'ultimo slash
+                        const sl = slashList[slashList.length - 1];
+                        const elapsed = now - sl.startTime;
+                        if (elapsed < SLASH_DURATION) {
+                            // t: 0→0.5 avanza, 0.5→1 torna
+                            const t = elapsed / SLASH_DURATION;
+                            const swing = t < 0.5 ? t * 2 : 2 - t * 2;  // 0→1→0
+                            slashOffset = swing * 16;  // avanza fino a 16px
+                        }
+                    }
 
-                    // ── MANICO blu scuro ──
-                    const hStartX = handX;
-                    const hStartY = handY;
-                    const hEndX   = handX + cos * 14;
-                    const hEndY   = handY + sin * 14;
+                    // Mano sinistra — fissa, lato -perp
+                    const lhX = px + cos * (R + 6) - perp.x * 18;
+                    const lhY = py + sin * (R + 6) - perp.y * 18;
+                    drawHand(lhX, lhY, 8);
 
-                    // Outline manico
-                    drawLine({ p1: vec2(hStartX, hStartY), p2: vec2(hEndX, hEndY), width: 9,  color: rgb(0, 0, 0) });
-                    // Corpo manico blu
-                    drawLine({ p1: vec2(hStartX, hStartY), p2: vec2(hEndX, hEndY), width: 6,  color: rgb(20, 60, 160) });
-                    // Riflesso manico
-                    drawLine({ p1: vec2(hStartX + cos*2 + perp.x, hStartY + sin*2 + perp.y), p2: vec2(hEndX - cos*2 + perp.x, hEndY - sin*2 + perp.y), width: 1.5, color: rgb(80, 130, 220) });
+                    // Origine del coltello: mano destra + offset slash lungo la direzione
+                    const knifeOriginX = px + cos * (R + 6) + perp.x * 18 + cos * slashOffset;
+                    const knifeOriginY = py + sin * (R + 6) + perp.y * 18 + sin * slashOffset;
 
-                    // Pomolo (fondo manico)
-                    drawCircle({ pos: vec2(hStartX - cos*3, hStartY - sin*3), radius: 5,   color: rgb(0, 0, 0) });
-                    drawCircle({ pos: vec2(hStartX - cos*3, hStartY - sin*3), radius: 3.5, color: rgb(15, 45, 130) });
+                    // Disegna il coltello (la funzione usa knifeOrigin come base del manico)
+                    drawKnife(knifeOriginX, knifeOriginY, angle, perp, 0, 0);
 
-                    // ── GUARDIA A CROCE nera ──
-                    const gx = hEndX, gy = hEndY;
-                    drawLine({ p1: vec2(gx + perp.x * 8, gy + perp.y * 8), p2: vec2(gx - perp.x * 8, gy - perp.y * 8), width: 7, color: rgb(0, 0, 0) });
-                    drawLine({ p1: vec2(gx + perp.x * 6, gy + perp.y * 6), p2: vec2(gx - perp.x * 6, gy - perp.y * 6), width: 4, color: rgb(15, 15, 20) });
-
-                    // ── LAMA azzurra/cyan ──
-                    const bStartX = gx + cos;
-                    const bStartY = gy + sin;
-                    const bTipX   = bStartX + cos * 26;
-                    const bTipY   = bStartY + sin * 26;
-                    const bMidX   = bStartX + cos * 13;
-                    const bMidY   = bStartY + sin * 13;
-
-                    // Outline lama
-                    drawLine({ p1: vec2(bStartX, bStartY), p2: vec2(bTipX, bTipY), width: 8, color: rgb(0, 0, 0) });
-                    // Corpo lama azzurro
-                    drawLine({ p1: vec2(bStartX, bStartY), p2: vec2(bTipX, bTipY), width: 5, color: rgb(50, 150, 220) });
-                    // Riflesso chiaro (lato +perp, filo superiore)
-                    drawLine({ p1: vec2(bStartX + perp.x*2, bStartY + perp.y*2), p2: vec2(bTipX, bTipY), width: 3, color: rgb(150, 220, 255) });
-                    // Riflesso centrale brillante
-                    drawLine({ p1: vec2(bMidX + perp.x*1, bMidY + perp.y*1), p2: vec2(bTipX, bTipY), width: 1.5, color: rgb(220, 245, 255) });
-                    // Filo inferiore
-                    drawLine({ p1: vec2(bStartX - perp.x*1.5, bStartY - perp.y*1.5), p2: vec2(bTipX, bTipY), width: 1.5, color: rgb(30, 100, 180) });
-
-                    // Buco nella lama (dettaglio dell'immagine)
-                    const holeX = bStartX + cos * 18 + perp.x * 1;
-                    const holeY = bStartY + sin * 18 + perp.y * 1;
-                    drawCircle({ pos: vec2(holeX, holeY), radius: 3,   color: rgb(0, 0, 0) });
-                    drawCircle({ pos: vec2(holeX, holeY), radius: 1.5, color: rgb(20, 80, 160) });
-
-                    // ── MANI (sopra il coltello) ──
-                    // Mano sinistra — lato -perp
-                    drawHand(px + cos * (R + 2) - perp.x * 10, py + sin * (R + 2) - perp.y * 10, 7);
-                    // Mano destra — regge il coltello
-                    drawHand(handX, handY, 7);
+                    // Mano destra — sopra il coltello, si muove con esso
+                    drawHand(knifeOriginX, knifeOriginY, 8);
 
                 } else if (wtype === "pistol") {
                     drawRect({ pos: vec2(px + cos * R, py + sin * R), width: 30, height: 9, color: rgb(17, 17, 17), radius: 4, angle: angle * (180 / Math.PI), anchor: "left", offset: vec2(0, -4.5) });
@@ -151,6 +151,11 @@ export function creaGunDrawObj() {
                     drawHand(px + cos * (R + 2)  - perp.x * 3, py + sin * (R + 2)  - perp.y * 3, 7);
                     drawHand(px + cos * (R + 30) + perp.x * 5, py + sin * (R + 30) + perp.y * 5, 7);
                 }
+            }
+
+            // Pulisci slash scaduti
+            for (let i = slashList.length - 1; i >= 0; i--) {
+                if (now - slashList[i].startTime >= SLASH_DURATION) slashList.splice(i, 1);
             }
         }
     }]);
