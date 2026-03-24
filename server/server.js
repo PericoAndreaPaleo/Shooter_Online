@@ -271,12 +271,21 @@ function creaLobby(lobbyId, lobbyName, password) {
                 p.punchCount = (p.punchCount || 0) + 1;
                 p.punchFlash = true;
                 p.punchHand  = p.punchCount % 2; // 1=destra 0=sinistra
-                const range = RANGE_BY_WEAPON.fists;
+                // Mani a 23+18+9+10 = ~60px, solo cono frontale +-90 gradi
+                const range = 60;
+                const punchAngle = p.angle;
                 for (const id in lobby.players) {
                     if (id === socket.id) continue;
                     const target = lobby.players[id];
                     if (target.morto) continue;
-                    const dist = Math.hypot(target.pos.x - p.pos.x, target.pos.y - p.pos.y);
+                    const dx = target.pos.x - p.pos.x;
+                    const dy = target.pos.y - p.pos.y;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist > range) continue;
+                    let angleDiff = Math.atan2(dy, dx) - punchAngle;
+                    while (angleDiff >  Math.PI) angleDiff -= 2 * Math.PI;
+                    while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+                    if (Math.abs(angleDiff) > Math.PI / 2) continue;
                     if (dist <= range) {
                         target.hp -= DAMAGE_BY_WEAPON.fists;
                         target.hitFlash = true;
