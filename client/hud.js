@@ -47,7 +47,7 @@ export function aggiornaHUDArma() {
     if (hudWeaponObj) { destroy(hudWeaponObj); hudWeaponObj = null; }
     if (state.inLobbyScreen) return;
     if (isMobile()) return;
-    const names = { gun: "Rifle", pistol: "Pistol", fists: "Knife" };
+    const names = { gun: "Rifle", pistol: "Pistol", fists: "Fists" };
     const keys  = ["gun", "pistol", "fists"];
     hudWeaponObj = add([fixed(), z(100), {
         draw() {

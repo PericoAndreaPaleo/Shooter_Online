@@ -2,7 +2,7 @@
 // GAME — stato, sparo, input, onUpdate
 // ========================
 import { state, GAME_W, GAME_H, hx, hy, hs, isMobile, cambiaArma } from "./state.js";
-import { playShootSound, playHitSound, playKillSound, playKnifeSound, playDeathSound } from "./audio.js";
+import { playShootSound, playHitSound, playKillSound, playPunchSound, playDeathSound } from "./audio.js";
 import {
     aggiornaHUDStats, aggiornaHUDAmmo, aggiornaHUDArma, aggiornaHUDPlayers,
     aggiornaLeaderboard, mostraKillFeed, killFeedList, killFeedObjs
@@ -66,7 +66,7 @@ export function shoot() {
     state.socket.emit("aim",   angle);
     state.socket.emit("shoot", { dir, tipOffset: { x: nx * tipDist, y: ny * tipDist } });
     if (state.weapon !== "fists") playShootSound();
-    else { playKnifeSound(); myPunchHand = myPunchHand === 1 ? 0 : 1; triggerPunch(state.myId, myPunchHand); }
+    else { playPunchSound(); myPunchHand = myPunchHand === 1 ? 0 : 1; triggerPunch(state.myId, myPunchHand); }
 }
 
 function shootTouchJoy() {
@@ -77,7 +77,7 @@ function shootTouchJoy() {
     const tipDist = state.weapon === "fists" ? 0 : 24 + (state.weapon === "pistol" ? 10 : 40);
     state.socket.emit("shoot", { dir: { x: nx, y: ny }, tipOffset: { x: nx * tipDist, y: ny * tipDist } });
     if (state.weapon !== "fists") playShootSound();
-    else { playKnifeSound(); myPunchHand = myPunchHand === 1 ? 0 : 1; triggerPunch(state.myId, myPunchHand); }
+    else { playPunchSound(); myPunchHand = myPunchHand === 1 ? 0 : 1; triggerPunch(state.myId, myPunchHand); }
 }
 
 export function registraEventiSparo(canvas) {
