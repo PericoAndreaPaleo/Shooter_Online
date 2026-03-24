@@ -5,16 +5,18 @@ import { state } from "./state.js";
 
 let gunDrawObj = null;
 
-const PUNCH_DURATION = 200; // ms
+const PUNCH_DURATION = 300; // ms — durata animazione
+const PUNCH_ANIM_COOLDOWN = 400; // ms — non può ripartire prima di questo
+const punchLastTrigger = {}; // playerId → timestamp ultimo trigger
 
-// Chiamata da game.js: segna il pugno e quale mano sul player
-// hand: 1 = destra (+perp), 0 = sinistra (-perp)
 export function triggerPunch(playerId, hand) {
     const p = state.players[playerId];
-    if (p) {
-        p.punchStartTime = performance.now();
-        p.punchHand = hand;
-    }
+    if (!p) return;
+    const now = performance.now();
+    if (punchLastTrigger[playerId] && now - punchLastTrigger[playerId] < PUNCH_ANIM_COOLDOWN) return;
+    punchLastTrigger[playerId] = now;
+    p.punchStartTime = now;
+    p.punchHand = hand;
 }
 
 export function creaGunDrawObj() {
@@ -57,8 +59,8 @@ export function creaGunDrawObj() {
                     }
 
                     // Posizione base delle mani — 20px di separazione laterale
-                    const baseForward = 17; // 17px avanti rispetto al centro
-                    const SIDE = 17;        // separazione laterale
+                    const baseForward = 20; // 20px avanti rispetto al centro
+                    const SIDE = 15;        // separazione laterale
 
                     // Offset avanti applicato solo alla mano che sta punchando
                     const rhOffset = punchHand === 1 ? punchOffset : 0;

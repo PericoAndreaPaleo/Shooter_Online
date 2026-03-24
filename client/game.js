@@ -84,10 +84,10 @@ export function registraEventiSparo(canvas) {
     function fireLoop() {
         const n = performance.now();
         if (mouseDown && state.weapon === "gun"   && n - lastAssaltoShot >= AUTO_FIRE_MS) { shoot(); lastAssaltoShot = n; }
-        if (mouseDown && state.weapon === "fists" && n - lastAssaltoShot >= 800)          { shoot(); lastAssaltoShot = n; }
+        if (mouseDown && state.weapon === "fists" && n - lastAssaltoShot >= 400)          { shoot(); lastAssaltoShot = n; }
         if (state.aimJoyActive) {
             if (state.socket) state.socket.emit("aim", state.aimJoyAngle);
-            const cooldown = state.weapon === "gun" ? AUTO_FIRE_MS : state.weapon === "fists" ? 800 : PISTOL_COOLDOWN_MS;
+            const cooldown = state.weapon === "gun" ? AUTO_FIRE_MS : state.weapon === "fists" ? 400 : PISTOL_COOLDOWN_MS;
             if (n - lastPistolShot >= cooldown) { shootTouchJoy(); lastPistolShot = n; }
         }
         requestAnimationFrame(fireLoop);
