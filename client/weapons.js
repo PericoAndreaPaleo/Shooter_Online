@@ -57,8 +57,8 @@ export function creaGunDrawObj() {
                     }
 
                     // Posizione base delle mani — 20px di separazione laterale
-                    const baseForward = R - 22; // vicine al centro
-                    const SIDE = 20;            // separazione laterale
+                    const baseForward = 23; // 23px avanti rispetto al centro
+                    const SIDE = 23;        // separazione laterale
 
                     // Offset avanti applicato solo alla mano che sta punchando
                     const rhOffset = punchHand === 1 ? punchOffset : 0;
