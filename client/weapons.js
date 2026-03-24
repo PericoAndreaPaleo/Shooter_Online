@@ -5,7 +5,7 @@ import { state } from "./state.js";
 
 let gunDrawObj = null;
 
-const PUNCH_DURATION = 300; // ms — durata animazione
+const PUNCH_DURATION = 180; // ms — durata animazione
 const PUNCH_ANIM_COOLDOWN = 200; // ms — non può ripartire prima di questo
 const punchLastTrigger = {}; // playerId → timestamp ultimo trigger
 

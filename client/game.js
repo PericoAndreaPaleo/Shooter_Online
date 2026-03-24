@@ -46,7 +46,7 @@ export function registraInputTastiera() {
 // SPARO
 // ========================
 const PISTOL_COOLDOWN_MS = 200, AUTO_FIRE_MS = 100;
-let myPunchHand = 0; // alterna 0/1 in sync col server
+let myPunchPending = false; // evita doppio trigger locale
 let lastPistolShot = 0, lastAssaltoShot = 0, mouseDown = false;
 
 export function shoot() {
@@ -66,7 +66,7 @@ export function shoot() {
     state.socket.emit("aim",   angle);
     state.socket.emit("shoot", { dir, tipOffset: { x: nx * tipDist, y: ny * tipDist } });
     if (state.weapon !== "fists") playShootSound();
-    else { playPunchSound(); myPunchHand = myPunchHand === 1 ? 0 : 1; triggerPunch(state.myId, myPunchHand); }
+    else { playPunchSound(); }
 }
 
 function shootTouchJoy() {
@@ -77,7 +77,7 @@ function shootTouchJoy() {
     const tipDist = state.weapon === "fists" ? 0 : 24 + (state.weapon === "pistol" ? 10 : 40);
     state.socket.emit("shoot", { dir: { x: nx, y: ny }, tipOffset: { x: nx * tipDist, y: ny * tipDist } });
     if (state.weapon !== "fists") playShootSound();
-    else { playPunchSound(); myPunchHand = myPunchHand === 1 ? 0 : 1; triggerPunch(state.myId, myPunchHand); }
+    else { playPunchSound(); }
 }
 
 export function registraEventiSparo(canvas) {
@@ -232,9 +232,9 @@ export function aggiornaStato(state_arg, canvas) {
                     setTimeout(() => { if (p.sprite) p.sprite.color = rgb(222, 196, 145); }, 80);
                 }
                 // Animazione pugno per i player avversari — confronta contatore
-                if (!isMe && s.punchCount && s.punchCount !== p.lastPunchCount) {
+                if (s.punchCount && s.punchCount !== p.lastPunchCount) {
                     p.lastPunchCount = s.punchCount;
-                    triggerPunch(id, s.punchHand ?? 1);
+                    triggerPunch(id, s.punchHand ?? 0);
                 }
                 p.sprite.pos.x += (s.pos.x - p.sprite.pos.x) * lerp;
                 p.sprite.pos.y += (s.pos.y - p.sprite.pos.y) * lerp;

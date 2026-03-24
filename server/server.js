@@ -191,7 +191,7 @@ function creaLobby(lobbyId, lobbyName, password) {
             lobby.players[socket.id] = {
                 pos: spawnPos(lobby), dir: { x: 0, y: 0 },
                 angle: 0, hp: PLAYER_MAX_HP, morto: true,
-                nickname, lastShot: 0, hitFlash: false, lastHit: 0, weapon: "gun", punchCount: 0,
+                nickname, lastShot: 0, hitFlash: false, lastHit: 0, weapon: "gun", punchCount: 0, lastPunchHand: 0,
             };
             lobby.leaderboard[socket.id] = { nickname, kills, deaths };
 
@@ -275,7 +275,7 @@ function creaLobby(lobbyId, lobbyName, password) {
                 p.punchFlash = true;
                 p.punchHand  = nextHand;
 
-                const range = 100;
+                const range = 80;
                 const punchAngle = p.angle;
                 for (const id in lobby.players) {
                     if (id === socket.id) continue;
@@ -493,7 +493,7 @@ setInterval(() => {
                     angle: p.angle, weapon: p.weapon,
                     hitFlash: p.hitFlash || undefined,
                     punchCount: p.punchCount || 0,
-                    punchHand: p.punchHand || 0,
+                    punchHand: p.punchHand ?? 0,
                     ammo: p.ammo || { gun: MAX_AMMO.gun, pistol: MAX_AMMO.pistol },
                 };
             }
