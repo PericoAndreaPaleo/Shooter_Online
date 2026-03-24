@@ -24,7 +24,7 @@ const map = { width: 5000, height: 5000 };
 const PLAYER_RADIUS = 20;
 const PLAYER_MAX_HP = 100;
 const DAMAGE_BY_WEAPON    = { gun: 25, pistol: 15, fists: 100 };
-const COOLDOWN_BY_WEAPON  = { gun: 100, pistol: 200, fists: 400 };
+const COOLDOWN_BY_WEAPON  = { gun: 100, pistol: 200, fists: 200 };
 const RANGE_BY_WEAPON     = { gun: null, pistol: null, fists: 80 }; // raggio corpo a corpo
 const MAX_AMMO = { gun: 30, pistol: 15, fists: 0 };
 const RELOAD_TIME = { gun: 2000, pistol: 1500 };
@@ -268,11 +268,14 @@ function creaLobby(lobbyId, lobbyName, password) {
 
             // ── Karambit (corpo a corpo) ──
             if (p.weapon === "fists") {
+                // Alterna sempre la mano esplicitamente
+                const nextHand = (p.lastPunchHand === 1) ? 0 : 1;
+                p.lastPunchHand = nextHand;
                 p.punchCount = (p.punchCount || 0) + 1;
                 p.punchFlash = true;
-                p.punchHand  = p.punchCount % 2; // 1=destra 0=sinistra
-                // Mani a 23+18+9+10 = ~60px, solo cono frontale +-90 gradi
-                const range = 60;
+                p.punchHand  = nextHand;
+
+                const range = 100;
                 const punchAngle = p.angle;
                 for (const id in lobby.players) {
                     if (id === socket.id) continue;
@@ -285,7 +288,7 @@ function creaLobby(lobbyId, lobbyName, password) {
                     let angleDiff = Math.atan2(dy, dx) - punchAngle;
                     while (angleDiff >  Math.PI) angleDiff -= 2 * Math.PI;
                     while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-                    if (Math.abs(angleDiff) > Math.PI / 2) continue;
+                    if (Math.abs(angleDiff) > (100 * Math.PI / 180)) continue;
                     if (dist <= range) {
                         target.hp -= DAMAGE_BY_WEAPON.fists;
                         target.hitFlash = true;

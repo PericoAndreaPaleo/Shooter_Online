@@ -19,7 +19,7 @@ Supporta più lobby simultanee, gioco su mobile con joystick virtuale, lobby pri
 |------|-------|---------|-----------|
 | Mitra (`gun`) | 25 | Auto 100ms | 30 |
 | Pistola (`pistol`) | 15 | Semi 200ms | 15 |
-| Pugni (`fists`) | 100 | 400ms | ∞ |
+| Pugni (`fists`) | 100 | 200ms | ∞ |
 
 - Rigenerazione HP automatica dopo 4 secondi senza ricevere danni
 - HP massimi: 100

@@ -46,7 +46,7 @@ export function registraInputTastiera() {
 // SPARO
 // ========================
 const PISTOL_COOLDOWN_MS = 200, AUTO_FIRE_MS = 100;
-let myPunchCount = 0; // conta i pugni del proprio player per alternare le mani
+let myPunchHand = 0; // alterna 0/1 in sync col server
 let lastPistolShot = 0, lastAssaltoShot = 0, mouseDown = false;
 
 export function shoot() {
@@ -66,7 +66,7 @@ export function shoot() {
     state.socket.emit("aim",   angle);
     state.socket.emit("shoot", { dir, tipOffset: { x: nx * tipDist, y: ny * tipDist } });
     if (state.weapon !== "fists") playShootSound();
-    else { playKnifeSound(); myPunchCount++; triggerPunch(state.myId, myPunchCount % 2 === 1 ? 1 : 0); }
+    else { playKnifeSound(); myPunchHand = myPunchHand === 1 ? 0 : 1; triggerPunch(state.myId, myPunchHand); }
 }
 
 function shootTouchJoy() {
@@ -77,17 +77,17 @@ function shootTouchJoy() {
     const tipDist = state.weapon === "fists" ? 0 : 24 + (state.weapon === "pistol" ? 10 : 40);
     state.socket.emit("shoot", { dir: { x: nx, y: ny }, tipOffset: { x: nx * tipDist, y: ny * tipDist } });
     if (state.weapon !== "fists") playShootSound();
-    else { playKnifeSound(); myPunchCount++; triggerPunch(state.myId, myPunchCount % 2 === 1 ? 1 : 0); }
+    else { playKnifeSound(); myPunchHand = myPunchHand === 1 ? 0 : 1; triggerPunch(state.myId, myPunchHand); }
 }
 
 export function registraEventiSparo(canvas) {
     function fireLoop() {
         const n = performance.now();
         if (mouseDown && state.weapon === "gun"   && n - lastAssaltoShot >= AUTO_FIRE_MS) { shoot(); lastAssaltoShot = n; }
-        if (mouseDown && state.weapon === "fists" && n - lastAssaltoShot >= 400)          { shoot(); lastAssaltoShot = n; }
+        if (mouseDown && state.weapon === "fists" && n - lastAssaltoShot >= 200)          { shoot(); lastAssaltoShot = n; }
         if (state.aimJoyActive) {
             if (state.socket) state.socket.emit("aim", state.aimJoyAngle);
-            const cooldown = state.weapon === "gun" ? AUTO_FIRE_MS : state.weapon === "fists" ? 400 : PISTOL_COOLDOWN_MS;
+            const cooldown = state.weapon === "gun" ? AUTO_FIRE_MS : state.weapon === "fists" ? 200 : PISTOL_COOLDOWN_MS;
             if (n - lastPistolShot >= cooldown) { shootTouchJoy(); lastPistolShot = n; }
         }
         requestAnimationFrame(fireLoop);
