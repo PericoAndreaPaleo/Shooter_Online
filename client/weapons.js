@@ -5,12 +5,16 @@ import { state } from "./state.js";
 
 let gunDrawObj = null;
 
-// Slash attivi per animazione pugno
-const slashList = [];
-const PUNCH_DURATION = 200; // ms — il pugno avanza e torna
+const PUNCH_DURATION = 200; // ms
 
-export function triggerSlash(x, y, angle) {
-    slashList.push({ x, y, angle, startTime: performance.now() });
+// Chiamata da game.js: segna il pugno e quale mano sul player
+// hand: 1 = destra (+perp), 0 = sinistra (-perp)
+export function triggerPunch(playerId, hand) {
+    const p = state.players[playerId];
+    if (p) {
+        p.punchStartTime = performance.now();
+        p.punchHand = hand;
+    }
 }
 
 export function creaGunDrawObj() {
@@ -20,11 +24,6 @@ export function creaGunDrawObj() {
             if (state.inMenu || state.inLobbyScreen || !state.myId) return;
 
             const now = performance.now();
-
-            // Pulisci punch scaduti
-            for (let i = slashList.length - 1; i >= 0; i--) {
-                if (now - slashList[i].startTime >= PUNCH_DURATION) slashList.splice(i, 1);
-            }
 
             for (const id in state.players) {
                 const p = state.players[id];
@@ -43,25 +42,35 @@ export function creaGunDrawObj() {
                 };
 
                 if (wtype === "fists") {
-                    // ── calcola offset pugno per il player corrente ──
+                    // Calcola offset pugno
                     let punchOffset = 0;
-                    if (id === state.myId && slashList.length > 0) {
-                        const sl = slashList[slashList.length - 1];
-                        const t  = (now - sl.startTime) / PUNCH_DURATION; // 0→1
-                        // Avanza nella prima metà, torna nella seconda
-                        punchOffset = (t < 0.5 ? t * 2 : 2 - t * 2) * 18;
+                    let punchHand = 1; // default destra
+                    if (p.punchStartTime) {
+                        const elapsed = now - p.punchStartTime;
+                        if (elapsed < PUNCH_DURATION) {
+                            const t = elapsed / PUNCH_DURATION;
+                            punchOffset = (t < 0.5 ? t * 2 : 2 - t * 2) * 18;
+                            punchHand = p.punchHand ?? 1;
+                        } else {
+                            p.punchStartTime = null;
+                        }
                     }
 
-                    // Mano destra — si muove col pugno (+perp)
-                    const rhX = px + cos * (R + 8 + punchOffset) + perp.x * 16;
-                    const rhY = py + sin * (R + 8 + punchOffset) + perp.y * 16;
+                    // Posizione base delle mani — 20px di separazione laterale
+                    const baseForward = R - 22; // vicine al centro
+                    const SIDE = 20;            // separazione laterale
 
-                    // Mano sinistra — ferma (-perp)
-                    const lhX = px + cos * (R + 8) - perp.x * 16;
-                    const lhY = py + sin * (R + 8) - perp.y * 16;
+                    // Offset avanti applicato solo alla mano che sta punchando
+                    const rhOffset = punchHand === 1 ? punchOffset : 0;
+                    const lhOffset = punchHand === 0 ? punchOffset : 0;
 
-                    drawHand(lhX, lhY, 9);
-                    drawHand(rhX, rhY, 9);
+                    const rhX = px + cos * (baseForward + rhOffset) + perp.x * SIDE;
+                    const rhY = py + sin * (baseForward + rhOffset) + perp.y * SIDE;
+                    const lhX = px + cos * (baseForward + lhOffset) - perp.x * SIDE;
+                    const lhY = py + sin * (baseForward + lhOffset) - perp.y * SIDE;
+
+                    drawHand(lhX, lhY, 7);
+                    drawHand(rhX, rhY, 7);
 
                 } else if (wtype === "pistol") {
                     drawRect({ pos: vec2(px + cos * R, py + sin * R), width: 30, height: 9, color: rgb(17, 17, 17), radius: 4, angle: angle * (180 / Math.PI), anchor: "left", offset: vec2(0, -4.5) });

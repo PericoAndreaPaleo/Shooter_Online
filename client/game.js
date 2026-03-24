@@ -8,7 +8,7 @@ import {
     aggiornaLeaderboard, mostraKillFeed, killFeedList, killFeedObjs
 } from "./hud.js";
 import { aggiornaWeaponBtns, aggiornaReloadBtn, creaTouchUI } from "./touch.js";
-import { triggerSlash } from "./weapons.js";
+import { triggerPunch } from "./weapons.js";
 
 let _distruggiUI   = null;
 let _mostraMenu    = null;
@@ -46,6 +46,7 @@ export function registraInputTastiera() {
 // SPARO
 // ========================
 const PISTOL_COOLDOWN_MS = 200, AUTO_FIRE_MS = 100;
+let myPunchCount = 0; // conta i pugni del proprio player per alternare le mani
 let lastPistolShot = 0, lastAssaltoShot = 0, mouseDown = false;
 
 export function shoot() {
@@ -65,7 +66,7 @@ export function shoot() {
     state.socket.emit("aim",   angle);
     state.socket.emit("shoot", { dir, tipOffset: { x: nx * tipDist, y: ny * tipDist } });
     if (state.weapon !== "fists") playShootSound();
-    else { playKnifeSound(); const me2 = state.players[state.myId]; if (me2 && me2.sprite) triggerSlash(me2.sprite.pos.x, me2.sprite.pos.y, angle); }
+    else { playKnifeSound(); myPunchCount++; triggerPunch(state.myId, myPunchCount % 2 === 1 ? 1 : 0); }
 }
 
 function shootTouchJoy() {
@@ -76,7 +77,7 @@ function shootTouchJoy() {
     const tipDist = state.weapon === "fists" ? 0 : 24 + (state.weapon === "pistol" ? 10 : 40);
     state.socket.emit("shoot", { dir: { x: nx, y: ny }, tipOffset: { x: nx * tipDist, y: ny * tipDist } });
     if (state.weapon !== "fists") playShootSound();
-    else { playKnifeSound(); const me2 = state.players[state.myId]; if (me2 && me2.sprite) triggerSlash(me2.sprite.pos.x, me2.sprite.pos.y, state.aimJoyAngle); }
+    else { playKnifeSound(); myPunchCount++; triggerPunch(state.myId, myPunchCount % 2 === 1 ? 1 : 0); }
 }
 
 export function registraEventiSparo(canvas) {
@@ -230,6 +231,8 @@ export function aggiornaStato(state_arg, canvas) {
                     if (isMe) playHitSound();
                     setTimeout(() => { if (p.sprite) p.sprite.color = rgb(222, 196, 145); }, 80);
                 }
+                // Animazione pugno per i player avversari
+                if (s.punchFlash && !isMe) triggerPunch(id, s.punchHand ?? 1);
                 p.sprite.pos.x += (s.pos.x - p.sprite.pos.x) * lerp;
                 p.sprite.pos.y += (s.pos.y - p.sprite.pos.y) * lerp;
                 if (p.labelObj) {

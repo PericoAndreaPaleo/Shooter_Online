@@ -191,7 +191,7 @@ function creaLobby(lobbyId, lobbyName, password) {
             lobby.players[socket.id] = {
                 pos: spawnPos(lobby), dir: { x: 0, y: 0 },
                 angle: 0, hp: PLAYER_MAX_HP, morto: true,
-                nickname, lastShot: 0, hitFlash: false, lastHit: 0, weapon: "gun",
+                nickname, lastShot: 0, hitFlash: false, lastHit: 0, weapon: "gun", punchCount: 0,
             };
             lobby.leaderboard[socket.id] = { nickname, kills, deaths };
 
@@ -268,6 +268,9 @@ function creaLobby(lobbyId, lobbyName, password) {
 
             // ── Karambit (corpo a corpo) ──
             if (p.weapon === "fists") {
+                p.punchCount = (p.punchCount || 0) + 1;
+                p.punchFlash = true;
+                p.punchHand  = p.punchCount % 2; // 1=destra 0=sinistra
                 const range = RANGE_BY_WEAPON.fists;
                 for (const id in lobby.players) {
                     if (id === socket.id) continue;
@@ -417,7 +420,7 @@ setInterval(() => {
         const dt = Math.min((now - lobby.lastTime) / 1000, 0.05);
         lobby.lastTime = now;
 
-        for (const id in lobby.players) lobby.players[id].hitFlash = false;
+        for (const id in lobby.players) { lobby.players[id].hitFlash = false; lobby.players[id].punchFlash = false; }
 
         // Movimento
         for (const id in lobby.players) {
@@ -482,6 +485,8 @@ setInterval(() => {
                     hp: p.hp, morto: p.morto, nickname: p.nickname,
                     angle: p.angle, weapon: p.weapon,
                     hitFlash: p.hitFlash || undefined,
+                    punchFlash: p.punchFlash || undefined,
+                    punchHand: p.punchHand,
                     ammo: p.ammo || { gun: MAX_AMMO.gun, pistol: MAX_AMMO.pistol },
                 };
             }
