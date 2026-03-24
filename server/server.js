@@ -413,14 +413,9 @@ io.on("connection", socket => {
 // ========================
 // GAME LOOP — 60fps fisica, 40fps broadcast
 // ========================
-let broadcastAcc = 0;
-const BROADCAST_INTERVAL = 1000 / 40;
-
 setInterval(() => {
     const now = Date.now();
-    broadcastAcc += 1000 / 60;
-    const doBroadcast = broadcastAcc >= BROADCAST_INTERVAL;
-    if (doBroadcast) broadcastAcc -= BROADCAST_INTERVAL;
+    const doBroadcast = true;
 
     for (const lobbyId in lobbies) {
         const lobby = lobbies[lobbyId];
