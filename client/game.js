@@ -231,8 +231,11 @@ export function aggiornaStato(state_arg, canvas) {
                     if (isMe) playHitSound();
                     setTimeout(() => { if (p.sprite) p.sprite.color = rgb(222, 196, 145); }, 80);
                 }
-                // Animazione pugno per i player avversari
-                if (s.punchFlash && !isMe) triggerPunch(id, s.punchHand ?? 1);
+                // Animazione pugno per i player avversari — confronta contatore
+                if (!isMe && s.punchCount && s.punchCount !== p.lastPunchCount) {
+                    p.lastPunchCount = s.punchCount;
+                    triggerPunch(id, s.punchHand ?? 1);
+                }
                 p.sprite.pos.x += (s.pos.x - p.sprite.pos.x) * lerp;
                 p.sprite.pos.y += (s.pos.y - p.sprite.pos.y) * lerp;
                 if (p.labelObj) {

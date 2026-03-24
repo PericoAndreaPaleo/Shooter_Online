@@ -424,7 +424,7 @@ setInterval(() => {
         const dt = Math.min((now - lobby.lastTime) / 1000, 0.05);
         lobby.lastTime = now;
 
-        for (const id in lobby.players) { lobby.players[id].hitFlash = false; lobby.players[id].punchFlash = false; }
+        for (const id in lobby.players) { lobby.players[id].hitFlash = false; }
 
         // Movimento
         for (const id in lobby.players) {
@@ -489,8 +489,8 @@ setInterval(() => {
                     hp: p.hp, morto: p.morto, nickname: p.nickname,
                     angle: p.angle, weapon: p.weapon,
                     hitFlash: p.hitFlash || undefined,
-                    punchFlash: p.punchFlash || undefined,
-                    punchHand: p.punchHand,
+                    punchCount: p.punchCount || 0,
+                    punchHand: p.punchHand || 0,
                     ammo: p.ammo || { gun: MAX_AMMO.gun, pistol: MAX_AMMO.pistol },
                 };
             }
