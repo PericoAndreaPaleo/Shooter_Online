@@ -60,7 +60,7 @@ export function creaGunDrawObj() {
 
                     // Posizione base delle mani — 20px di separazione laterale
                     const baseForward = 20; // 20px avanti rispetto al centro
-                    const SIDE = 15;        // separazione laterale
+                    const SIDE = 17;        // separazione laterale
 
                     // Offset avanti applicato solo alla mano che sta punchando
                     const rhOffset = punchHand === 1 ? punchOffset : 0;
@@ -71,8 +71,8 @@ export function creaGunDrawObj() {
                     const lhX = px + cos * (baseForward + lhOffset) - perp.x * SIDE;
                     const lhY = py + sin * (baseForward + lhOffset) - perp.y * SIDE;
 
-                    drawHand(lhX, lhY, 7);
-                    drawHand(rhX, rhY, 7);
+                    drawHand(lhX, lhY, 9);
+                    drawHand(rhX, rhY, 9);
 
                 } else if (wtype === "pistol") {
                     drawRect({ pos: vec2(px + cos * R, py + sin * R), width: 30, height: 9, color: rgb(17, 17, 17), radius: 4, angle: angle * (180 / Math.PI), anchor: "left", offset: vec2(0, -4.5) });
