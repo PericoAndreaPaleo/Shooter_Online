@@ -288,7 +288,7 @@ function creaLobby(lobbyId, lobbyName, password) {
                     let angleDiff = Math.atan2(dy, dx) - punchAngle;
                     while (angleDiff >  Math.PI) angleDiff -= 2 * Math.PI;
                     while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-                    if (Math.abs(angleDiff) > (100 * Math.PI / 180)) continue;
+                    if (Math.abs(angleDiff) > Math.PI / 2) continue;
                     if (dist <= range) {
                         target.hp -= DAMAGE_BY_WEAPON.fists;
                         target.hitFlash = true;
