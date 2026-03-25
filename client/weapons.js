@@ -5,18 +5,16 @@ import { state } from "./state.js";
 
 let gunDrawObj = null;
 
-const PUNCH_DURATION = 180; // ms — durata animazione
-const PUNCH_ANIM_COOLDOWN = 200; // ms — non può ripartire prima di questo
-const punchLastTrigger = {}; // playerId → timestamp ultimo trigger
+const PUNCH_DURATION = 200; // ms
 
+// Chiamata da game.js: segna il pugno e quale mano sul player
+// hand: 1 = destra (+perp), 0 = sinistra (-perp)
 export function triggerPunch(playerId, hand) {
     const p = state.players[playerId];
-    if (!p) return;
-    const now = performance.now();
-    if (punchLastTrigger[playerId] && now - punchLastTrigger[playerId] < PUNCH_ANIM_COOLDOWN) return;
-    punchLastTrigger[playerId] = now;
-    p.punchStartTime = now;
-    p.punchHand = hand;
+    if (p) {
+        p.punchStartTime = performance.now();
+        p.punchHand = hand;
+    }
 }
 
 export function creaGunDrawObj() {
@@ -59,8 +57,8 @@ export function creaGunDrawObj() {
                     }
 
                     // Posizione base delle mani — 20px di separazione laterale
-                    const baseForward = 18; // 18px avanti rispetto al centro
-                    const SIDE = 17;        // separazione laterale
+                    const baseForward = 22; // 22px avanti (meta tra 21 e 23)
+                    const SIDE = 16;        // separazione laterale
 
                     // Offset avanti applicato solo alla mano che sta punchando
                     const rhOffset = punchHand === 1 ? punchOffset : 0;
@@ -71,8 +69,8 @@ export function creaGunDrawObj() {
                     const lhX = px + cos * (baseForward + lhOffset) - perp.x * SIDE;
                     const lhY = py + sin * (baseForward + lhOffset) - perp.y * SIDE;
 
-                    drawHand(lhX, lhY, 8);
-                    drawHand(rhX, rhY, 8);
+                    drawHand(lhX, lhY, 7);
+                    drawHand(rhX, rhY, 7);
 
                 } else if (wtype === "pistol") {
                     drawRect({ pos: vec2(px + cos * R, py + sin * R), width: 30, height: 9, color: rgb(17, 17, 17), radius: 4, angle: angle * (180 / Math.PI), anchor: "left", offset: vec2(0, -4.5) });

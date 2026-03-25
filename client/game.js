@@ -2,7 +2,7 @@
 // GAME — stato, sparo, input, onUpdate
 // ========================
 import { state, GAME_W, GAME_H, hx, hy, hs, isMobile, cambiaArma } from "./state.js";
-import { playShootSound, playHitSound, playKillSound, playPunchSound, playDeathSound } from "./audio.js";
+import { playShootSound, playHitSound, playKillSound, playKnifeSound, playDeathSound } from "./audio.js";
 import {
     aggiornaHUDStats, aggiornaHUDAmmo, aggiornaHUDArma, aggiornaHUDPlayers,
     aggiornaLeaderboard, mostraKillFeed, killFeedList, killFeedObjs
@@ -46,7 +46,7 @@ export function registraInputTastiera() {
 // SPARO
 // ========================
 const PISTOL_COOLDOWN_MS = 200, AUTO_FIRE_MS = 100;
-let myPunchPending = false; // evita doppio trigger locale
+let myPunchCount = 0; // conta i pugni del proprio player per alternare le mani
 let lastPistolShot = 0, lastAssaltoShot = 0, mouseDown = false;
 
 export function shoot() {
@@ -66,7 +66,7 @@ export function shoot() {
     state.socket.emit("aim",   angle);
     state.socket.emit("shoot", { dir, tipOffset: { x: nx * tipDist, y: ny * tipDist } });
     if (state.weapon !== "fists") playShootSound();
-    else { playPunchSound(); }
+    else { playKnifeSound(); myPunchCount++; triggerPunch(state.myId, myPunchCount % 2 === 1 ? 1 : 0); }
 }
 
 function shootTouchJoy() {
@@ -77,17 +77,17 @@ function shootTouchJoy() {
     const tipDist = state.weapon === "fists" ? 0 : 24 + (state.weapon === "pistol" ? 10 : 40);
     state.socket.emit("shoot", { dir: { x: nx, y: ny }, tipOffset: { x: nx * tipDist, y: ny * tipDist } });
     if (state.weapon !== "fists") playShootSound();
-    else { playPunchSound(); }
+    else { playKnifeSound(); myPunchCount++; triggerPunch(state.myId, myPunchCount % 2 === 1 ? 1 : 0); }
 }
 
 export function registraEventiSparo(canvas) {
     function fireLoop() {
         const n = performance.now();
         if (mouseDown && state.weapon === "gun"   && n - lastAssaltoShot >= AUTO_FIRE_MS) { shoot(); lastAssaltoShot = n; }
-        if (mouseDown && state.weapon === "fists" && n - lastAssaltoShot >= 200)          { shoot(); lastAssaltoShot = n; }
+        if (mouseDown && state.weapon === "fists" && n - lastAssaltoShot >= 800)          { shoot(); lastAssaltoShot = n; }
         if (state.aimJoyActive) {
             if (state.socket) state.socket.emit("aim", state.aimJoyAngle);
-            const cooldown = state.weapon === "gun" ? AUTO_FIRE_MS : state.weapon === "fists" ? 200 : PISTOL_COOLDOWN_MS;
+            const cooldown = state.weapon === "gun" ? AUTO_FIRE_MS : state.weapon === "fists" ? 800 : PISTOL_COOLDOWN_MS;
             if (n - lastPistolShot >= cooldown) { shootTouchJoy(); lastPistolShot = n; }
         }
         requestAnimationFrame(fireLoop);
@@ -188,9 +188,9 @@ export function aggiornaStato(state_arg, canvas) {
         if (!state.players[id]) {
             if (s.morto) continue;
             const sprite   = add([pos(s.pos.x, s.pos.y), anchor("center"), circle(24), color(rgb(222, 196, 145)), outline(4, rgb(0, 0, 0)), z(1)]);
-            const labelObj = isMe ? add([pos(s.pos.x, s.pos.y - 40), anchor("center"), text(state.myNickname || "TU", { size: 17 }), color(rgb(0, 220, 255)), z(5)]) : null;
+            const labelObj = isMe ? add([pos(s.pos.x, s.pos.y - 40), anchor("center"), text(state.myNickname || "TU", { size: 17 }), color(rgb(0, 220, 255)), z(0)]) : null;
             const hpBar    = isMe ? creaHpBar(s.hp) : null;
-            state.players[id] = { sprite, labelObj, hpBar, dirIndicator: { angle: s.angle || 0, visible: true }, morto: s.morto };
+            state.players[id] = { sprite, labelObj, hpBar, dirIndicator: { angle: s.angle || 0, visible: true, weapon: s.weapon || "gun" }, morto: s.morto, lastPunchCount: s.punchCount || 0, punchStartTime: null, punchHand: 1 };
             if (isMe) {
                 _distruggiUI(); state.inMenu = false; state.cameraInizializzata = false;
                 // Azzera input prima di emettere, così il player non si muove da solo
@@ -221,7 +221,7 @@ export function aggiornaStato(state_arg, canvas) {
                     p.hpBar = creaHpBar(s.hp);
                     // Ricreo il labelObj con il nickname aggiornato (era nascosto dopo la morte)
                     if (p.labelObj) destroy(p.labelObj);
-                    p.labelObj = add([pos(s.pos.x, s.pos.y - 40), anchor("center"), text(state.myNickname || "TU", { size: 17 }), color(rgb(0, 220, 255)), z(5)]);
+                    p.labelObj = add([pos(s.pos.x, s.pos.y - 40), anchor("center"), text(state.myNickname || "TU", { size: 17 }), color(rgb(0, 220, 255)), z(0)]);
                     if (isMobile()) creaTouchUI();
                 }
                 p.sprite.hidden = false;
@@ -232,9 +232,9 @@ export function aggiornaStato(state_arg, canvas) {
                     setTimeout(() => { if (p.sprite) p.sprite.color = rgb(222, 196, 145); }, 80);
                 }
                 // Animazione pugno per i player avversari — confronta contatore
-                if (s.punchCount && s.punchCount !== p.lastPunchCount) {
+                if (!isMe && s.punchCount && s.punchCount !== p.lastPunchCount) {
                     p.lastPunchCount = s.punchCount;
-                    triggerPunch(id, s.punchHand ?? 0);
+                    triggerPunch(id, s.punchHand ?? 1);
                 }
                 p.sprite.pos.x += (s.pos.x - p.sprite.pos.x) * lerp;
                 p.sprite.pos.y += (s.pos.y - p.sprite.pos.y) * lerp;
