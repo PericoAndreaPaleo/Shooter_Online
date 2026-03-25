@@ -68,7 +68,7 @@ const FIRE_COOLDOWN_MS = {
 const MELEE_RANGE = {
     gun:   null,
     pistol: null,
-    fists:  100,
+    fists:  120,
 };
 
 /** Munizioni massime per ogni arma (0 = arma corpo a corpo, infinita) */
