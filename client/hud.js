@@ -274,14 +274,7 @@ export function creaMinimappa() {
                 // Punto principale
                 drawCircle({ pos: vec2(mx, my), radius: hs(4.5), color: rgb(0, 0, 0) });
                 drawCircle({ pos: vec2(mx, my), radius: hs(3.5), color: rgb(0, 220, 255) });
-                // Freccia direzione
-                const angle = me.dirIndicator ? me.dirIndicator.angle || 0 : 0;
-                const arrowLen = hs(7);
-                drawLine({
-                    p1: vec2(mx, my),
-                    p2: vec2(mx + Math.cos(angle) * arrowLen, my + Math.sin(angle) * arrowLen),
-                    width: hs(1.5), color: rgb(255, 255, 255)
-                });
+
             }
 
             // ── Bordo esterno ──
