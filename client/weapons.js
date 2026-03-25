@@ -69,17 +69,17 @@ export function creaGunDrawObj() {
                     const lhX = px + cos * (baseForward + lhOffset) - perp.x * SIDE;
                     const lhY = py + sin * (baseForward + lhOffset) - perp.y * SIDE;
 
-                    drawHand(lhX, lhY, 7);
-                    drawHand(rhX, rhY, 7);
+                    drawHand(lhX, lhY, 7.5);
+                    drawHand(rhX, rhY, 7.5);
 
                 } else if (wtype === "pistol") {
                     drawRect({ pos: vec2(px + cos * R, py + sin * R), width: 30, height: 9, color: rgb(17, 17, 17), radius: 4, angle: angle * (180 / Math.PI), anchor: "left", offset: vec2(0, -4.5) });
-                    drawHand(px + cos * (R + 3), py + sin * (R + 3), 7);
+                    drawHand(px + cos * (R + 3), py + sin * (R + 3), 7.5);
 
                 } else {
                     drawRect({ pos: vec2(px + cos * R, py + sin * R), width: 60, height: 9, color: rgb(17, 17, 17), radius: 4, angle: angle * (180 / Math.PI), anchor: "left", offset: vec2(0, -4.5) });
-                    drawHand(px + cos * (R + 2)  - perp.x * 3, py + sin * (R + 2)  - perp.y * 3, 7);
-                    drawHand(px + cos * (R + 30) + perp.x * 5, py + sin * (R + 30) + perp.y * 5, 7);
+                    drawHand(px + cos * (R + 2)  - perp.x * 3, py + sin * (R + 2)  - perp.y * 3, 7.5);
+                    drawHand(px + cos * (R + 30) + perp.x * 5, py + sin * (R + 30) + perp.y * 5, 7.5);
                 }
             }
         }
