@@ -26,7 +26,7 @@ export const playShootSound = () => playSound("shoot", 320, 80, 0.12);
 export const playHitSound   = () => playSound("hit",   600, 100, 0.15, "sawtooth");
 export const playKillSound  = () => playSound("kill",  880, 1100, 0.2, "sine");
 
-export function playPunchSound() {
+export function playKnifeSound() {
     try {
         const ctx = getAudio();
         const osc = ctx.createOscillator(), gain = ctx.createGain();
