@@ -32,6 +32,7 @@ const SPEED = 300;
 const SPEED_PROIETTILE = 1750;
 const BULLET_LIFETIME = 1.2;
 const MAX_PLAYERS = 8;
+const MAX_LOBBIES = 20;
 const REJOIN_TTL = 5 * 60 * 1000; // 5 minuti per fare rejoin
 
 // ========================
@@ -357,6 +358,10 @@ function creaLobby(lobbyId, lobbyName, password) {
             if (Object.keys(lobby.players).length === 0) {
                 lobby.cleanupTimer = setTimeout(() => {
                     if (lobbies[lobbyId] && Object.keys(lobby.players).length === 0) {
+                        // Libera i nickname ancora salvati nei token non scaduti
+                        for (const t of Object.values(lobby.tokens)) {
+                            usedNicknames.delete(t.nickname);
+                        }
                         nsp.disconnectSockets(true);
                         io._nsps.delete("/lobby/" + lobbyId);
                         delete lobbies[lobbyId];
@@ -390,10 +395,16 @@ io.on("connection", socket => {
             : null;
         const isPrivate = !!(data && data.private && password);
 
+        // Controlla limite massimo lobby
+        if (Object.keys(lobbies).length >= MAX_LOBBIES) {
+            socket.emit("lobbyError", "Server is full. Too many active lobbies, try again later.");
+            return;
+        }
+
         // Nomi unici — controlla solo se il nome è stato specificato
         if (rawName) {
             const exists = Object.values(lobbies).some(l => l.name.toLowerCase() === lobbyName.toLowerCase());
-            if (exists) { socket.emit("lobbyError", `A lobby named "${lobbyName}".`); return; }
+            if (exists) { socket.emit("lobbyError", `A lobby named "${lobbyName}" already exists.`); return; }
         }
 
         const lobbyId = crypto.randomBytes(4).toString("hex");

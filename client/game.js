@@ -240,7 +240,7 @@ export function aggiornaStato(state_arg, canvas) {
         if (!state.players[id]) {
             if (s.morto) continue;
             const sprite   = add([pos(s.pos.x, s.pos.y), anchor("center"), circle(24), color(rgb(222, 196, 145)), outline(4, rgb(0, 0, 0)), z(1)]);
-            const labelObj = isMe ? add([pos(s.pos.x, s.pos.y - 40), anchor("center"), text(state.myNickname || "TU", { size: 17 }), color(rgb(0, 220, 255)), z(0.5)]) : null;
+            const labelObj = isMe ? add([pos(s.pos.x, s.pos.y + 40), anchor("center"), text(state.myNickname || "TU", { size: 17 }), color(rgb(0, 220, 255)), z(0.5)]) : null;
             const hpBar    = isMe ? creaHpBar(s.hp) : null;
             state.players[id] = { sprite, labelObj, hpBar, dirIndicator: { angle: s.angle || 0, visible: true, weapon: s.weapon || "gun" }, morto: s.morto, lastPunchCount: s.punchCount || 0, punchStartTime: null, punchHand: 1 };
             if (isMe) {
@@ -273,7 +273,7 @@ export function aggiornaStato(state_arg, canvas) {
                     p.hpBar = creaHpBar(s.hp);
                     // Ricreo il labelObj con il nickname aggiornato (era nascosto dopo la morte)
                     if (p.labelObj) destroy(p.labelObj);
-                    p.labelObj = add([pos(s.pos.x, s.pos.y - 40), anchor("center"), text(state.myNickname || "TU", { size: 17 }), color(rgb(0, 220, 255)), z(0.5)]);
+                    p.labelObj = add([pos(s.pos.x, s.pos.y + 40), anchor("center"), text(state.myNickname || "TU", { size: 17 }), color(rgb(0, 220, 255)), z(0.5)]);
                     if (isMobile()) creaTouchUI();
                 }
                 p.sprite.hidden = false;
@@ -292,7 +292,7 @@ export function aggiornaStato(state_arg, canvas) {
                 p.sprite.pos.y += (s.pos.y - p.sprite.pos.y) * lerp;
                 if (p.labelObj) {
                     p.labelObj.pos.x += (s.pos.x - p.labelObj.pos.x) * lerp;
-                    p.labelObj.pos.y += (s.pos.y + 41 - p.labelObj.pos.y) * lerp;
+                    p.labelObj.pos.y += (s.pos.y + 40 - p.labelObj.pos.y) * lerp;
                 }
                 if (p.hpBar) {
                     p.hpBar._disp += (s.hp - p.hpBar._disp) * 0.15;
