@@ -296,7 +296,7 @@ export function registraEventiSparo(canvas) {
             shoot();
             lastAutoFireTime = now;
         }
-        if (isMouseButtonHeld && state.weapon === "fists" && now - lastAutoFireTime >= 800) {
+        if (isMouseButtonHeld && state.weapon === "fists" && now - lastAutoFireTime >= 200) {
             shoot();
             lastAutoFireTime = now;
         }
@@ -308,7 +308,7 @@ export function registraEventiSparo(canvas) {
             const touchCooldown = state.weapon === "gun"
                 ? AUTO_FIRE_INTERVAL_MS
                 : state.weapon === "fists"
-                    ? 800
+                    ? 200
                     : PISTOL_CLIENT_COOLDOWN_MS;
 
             if (now - lastPistolShotTime >= touchCooldown) {

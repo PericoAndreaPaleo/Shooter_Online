@@ -61,7 +61,7 @@ const DAMAGE_BY_WEAPON = {
 const FIRE_COOLDOWN_MS = {
     gun:   100,
     pistol: 200,
-    fists:  800,
+    fists:  200,
 };
 
 /** Raggio di attacco corpo-a-corpo (null = solo proiettili) */
