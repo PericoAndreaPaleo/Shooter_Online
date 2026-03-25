@@ -24,15 +24,14 @@ export function initGame(distruggiUI, mostraMenu) {
 const keyMap = { a: "left", d: "right", w: "up", s: "down" };
 
 export function registraInputTastiera() {
+    let escTimer = null;
     window.addEventListener("keydown", e => {
-        // ESC — torna al menu (solo se in gioco e vivo)
         if (e.key === "Escape" && !state.inMenu && !state.inLobbyScreen &&
-            state.myId && state.players[state.myId] && !state.players[state.myId].morto) {
-            // Azzera input per non restare bloccato in movimento
-            Object.assign(state.input, { left: false, right: false, up: false, down: false });
-            if (state.socket) state.socket.emit("input", state.input);
-            _mostraMenu();
-            return;
+            state.myId && state.players[state.myId] && !state.players[state.myId].morto && !escTimer) {
+            escTimer = setTimeout(() => {
+                escTimer = null;
+                if (state.socket) state.socket.emit("selfKill");
+            }, 1000);
         }
         if (state.inMenu || state.inLobbyScreen) return;
         const dir = keyMap[e.key.toLowerCase()];
@@ -45,6 +44,8 @@ export function registraInputTastiera() {
         }
     });
     window.addEventListener("keyup", e => {
+        // Annulla ESC se rilasciato prima del secondo
+        if (e.key === "Escape" && escTimer) { clearTimeout(escTimer); escTimer = null; }
         if (state.inMenu || state.inLobbyScreen) return;
         const dir = keyMap[e.key.toLowerCase()];
         if (dir && state.input[dir]) { state.input[dir] = false; state.socket.emit("input", state.input); }

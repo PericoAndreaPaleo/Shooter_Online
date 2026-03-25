@@ -24,7 +24,7 @@ const map = { width: 5000, height: 5000 };
 const PLAYER_RADIUS = 20;
 const PLAYER_MAX_HP = 100;
 const DAMAGE_BY_WEAPON    = { gun: 25, pistol: 15, fists: 100 };
-const COOLDOWN_BY_WEAPON  = { gun: 100, pistol: 200, fists: 200 };
+const COOLDOWN_BY_WEAPON  = { gun: 100, pistol: 200, fists: 800 };
 const RANGE_BY_WEAPON     = { gun: null, pistol: null, fists: 80 }; // raggio corpo a corpo
 const MAX_AMMO = { gun: 30, pistol: 15, fists: 0 };
 const RELOAD_TIME = { gun: 2000, pistol: 1500 };
@@ -191,7 +191,7 @@ function creaLobby(lobbyId, lobbyName, password) {
             lobby.players[socket.id] = {
                 pos: spawnPos(lobby), dir: { x: 0, y: 0 },
                 angle: 0, hp: PLAYER_MAX_HP, morto: true,
-                nickname, lastShot: 0, hitFlash: false, lastHit: 0, weapon: "gun", punchCount: 0, lastPunchHand: 0,
+                nickname, lastShot: 0, hitFlash: false, lastHit: 0, weapon: "gun", punchCount: 0,
             };
             lobby.leaderboard[socket.id] = { nickname, kills, deaths };
 
@@ -259,6 +259,14 @@ function creaLobby(lobbyId, lobbyName, password) {
             }, RELOAD_TIME[weaponAlReload]);
         });
 
+        socket.on("selfKill", () => {
+            const p = lobby.players[socket.id];
+            if (!p || p.morto) return;
+            // Uccide il player come morte normale: il client riceve morto=true e va al menu
+            p.hp = 0; p.morto = true; p.dir = { x:0, y:0 };
+            if (lobby.leaderboard[socket.id]) lobby.leaderboard[socket.id].deaths++;
+        });
+
         socket.on("shoot", (data) => {
             const p = lobby.players[socket.id];
             if (!p || p.morto || !data || typeof data.dir !== "object") return;
@@ -268,14 +276,11 @@ function creaLobby(lobbyId, lobbyName, password) {
 
             // ── Karambit (corpo a corpo) ──
             if (p.weapon === "fists") {
-                // Alterna sempre la mano esplicitamente
-                const nextHand = (p.lastPunchHand === 1) ? 0 : 1;
-                p.lastPunchHand = nextHand;
                 p.punchCount = (p.punchCount || 0) + 1;
                 p.punchFlash = true;
-                p.punchHand  = nextHand;
-
-                const range = 80;
+                p.punchHand  = p.punchCount % 2; // 1=destra 0=sinistra
+                // Mani a 23+18+9+10 = ~60px, solo cono frontale +-90 gradi
+                const range = 60;
                 const punchAngle = p.angle;
                 for (const id in lobby.players) {
                     if (id === socket.id) continue;
@@ -493,7 +498,7 @@ setInterval(() => {
                     angle: p.angle, weapon: p.weapon,
                     hitFlash: p.hitFlash || undefined,
                     punchCount: p.punchCount || 0,
-                    punchHand: p.punchHand ?? 0,
+                    punchHand: p.punchHand || 0,
                     ammo: p.ammo || { gun: MAX_AMMO.gun, pistol: MAX_AMMO.pistol },
                 };
             }
