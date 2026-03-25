@@ -23,15 +23,57 @@ export function initGame(distruggiUI, mostraMenu) {
 // ========================
 const keyMap = { a: "left", d: "right", w: "up", s: "down" };
 
+// ========================
+// BARRA ESC — feedback visivo hold 1.5s
+// ========================
+const ESC_HOLD_MS = 1500;
+let escTimer       = null;
+let escAnimFrame   = null;
+let escStartTime   = null;
+let escBarObj      = null;
+
+function creaEscBar() {
+    rimuoviEscBar();
+    escBarObj = add([fixed(), z(300), {
+        draw() {
+            if (!escStartTime) return;
+            const progress = Math.min((performance.now() - escStartTime) / ESC_HOLD_MS, 1);
+            const W = hs(220), H = hs(10), bx = hx(GAME_W / 2) - W / 2, by = hy(40);
+            // Sfondo
+            drawRect({ pos: vec2(bx, by), width: W, height: H, radius: hs(3), color: rgb(0,0,0), opacity: 0.6 });
+            // Barra fill
+            if (progress > 0)
+                drawRect({ pos: vec2(bx, by), width: Math.round(W * progress), height: H, radius: hs(3), color: rgb(220, 60, 60), opacity: 0.9 });
+            // Label
+            const label = "Hold ESC to quit...";
+            const sz = hs(13);
+            drawText({ text: label, pos: vec2(hx(GAME_W / 2) - label.length * sz * 0.29, by + H + hs(5)), size: sz, color: rgb(220, 220, 220) });
+        }
+    }]);
+}
+
+function rimuoviEscBar() {
+    if (escBarObj) { destroy(escBarObj); escBarObj = null; }
+    escStartTime = null;
+}
+
+function annullaEsc() {
+    if (escTimer)     { clearTimeout(escTimer);       escTimer     = null; }
+    if (escAnimFrame) { cancelAnimationFrame(escAnimFrame); escAnimFrame = null; }
+    rimuoviEscBar();
+}
+
 export function registraInputTastiera() {
-    let escTimer = null;
     window.addEventListener("keydown", e => {
         if (e.key === "Escape" && !state.inMenu && !state.inLobbyScreen &&
             state.myId && state.players[state.myId] && !state.players[state.myId].morto && !escTimer) {
+            // Avvia hold: mostra barra e spara selfKill dopo 1.5s
+            escStartTime = performance.now();
+            creaEscBar();
             escTimer = setTimeout(() => {
-                escTimer = null;
+                annullaEsc();
                 if (state.socket) state.socket.emit("selfKill");
-            }, 1000);
+            }, ESC_HOLD_MS);
         }
         if (state.inMenu || state.inLobbyScreen) return;
         const dir = keyMap[e.key.toLowerCase()];
@@ -44,8 +86,8 @@ export function registraInputTastiera() {
         }
     });
     window.addEventListener("keyup", e => {
-        // Annulla ESC se rilasciato prima del secondo
-        if (e.key === "Escape" && escTimer) { clearTimeout(escTimer); escTimer = null; }
+        // Rilascio ESC prima dei 1.5s → annulla tutto
+        if (e.key === "Escape") annullaEsc();
         if (state.inMenu || state.inLobbyScreen) return;
         const dir = keyMap[e.key.toLowerCase()];
         if (dir && state.input[dir]) { state.input[dir] = false; state.socket.emit("input", state.input); }
