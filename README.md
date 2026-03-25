@@ -1,125 +1,153 @@
 # Shooter Online
 
-Un top-down shooter multiplayer browser-based, costruito con **Node.js**, **Socket.IO** e **Kaboom.js**.  
-Supporta più lobby simultanee, gioco su mobile con joystick virtuale, lobby private con password e rejoin automatico dopo disconnessione.
+**Un multiplayer shooter 2D top-down in tempo reale** sviluppato con **Kaboom.js** (client) e **Node.js + Socket.IO** (server).
+
+Gioca in lobby da massimo 8 giocatori, con movimento fluido, tre armi distinte e una mappa procedurale con ostacoli.
 
 ---
 
-## Gameplay
+## Armi Disponibili
 
-- Movimento con **WASD**, mira con il **mouse**
-- Tasto sinistro del mouse per sparare (auto-fire con il mitra)
-- **R** per ricaricare
-- Tasti **1 / 2 / 3** per cambiare arma
-- **Tieni premuto ESC per 1.5 secondi** per uscire dalla partita e tornare al menù
-- Su mobile: joystick sinistro per muoversi, joystick destro per mirare e sparare
-
-### Armi
-
-| Arma | Danno | Cadenza | Munizioni |
-|------|-------|---------|-----------|
-| Mitra (`gun`) | 25 | Auto 100ms | 30 |
-| Pistola (`pistol`) | 15 | Semi 200ms | 15 |
-| Coltello (`fists`) | 100 | 800ms | ∞ |
-
-- Rigenerazione HP automatica dopo 4 secondi senza ricevere danni
-- HP massimi: 100
+| Arma       | Tipo              | Munizioni | Danno | Note |
+|------------|-------------------|---------|-------|------|
+| **Rifle**  | Fucile d'assalto  | 30      | 25    | Fuoco automatico |
+| **Pistol** | Pistola           | 15      | 15    | Fuoco semi-automatico |
+| **Fists**  | Pugni (corpo a corpo) | -     | 100   | 1-hit kill in mischia |
 
 ---
 
-### Stack
+## Caratteristiche Principali
 
-- **Backend:** Node.js, Express, Socket.IO
-- **Frontend:** Kaboom.js (game engine), Socket.IO client
-- **Hosting:** [Render](https://render.com) (free tier)
-
-### Come funziona il server
-
-- La fisica gira **server-side a 60fps** (movimento, collisioni, proiettili) — niente cheating lato client
-- Ogni lobby ha un **namespace Socket.IO dedicato** (`/lobby/<id>`) per isolare il traffico
-- La mappa è **procedurale con seed** — rocce, alberi e cespugli generati casualmente a ogni lobby
-- Il broadcast dello stato ai client avviene insieme al game loop
+- **Grafica procedurale** con Kaboom.js (nessun asset esterno)
+- **Audio sintetico** generato in tempo reale con Web Audio API
+- **Supporto completo mobile** con doppio joystick virtuale
+- **Sistema di lobby** pubblico e privato con password
+- **Rejoin automatico** (puoi riconnetterti dopo una disconnessione)
+- **Mappa procedurale** con rocce, alberi e cespugli
+- **Fisica** con collisioni e risoluzione push-out
+- **Rigenerazione HP** automatica dopo 4 secondi senza subire danni
+- **Kill feed**, leaderboard e HUD responsivo
+- **Ottimizzato** per bassa latenza (60 tick/sec)
 
 ---
 
-## Avvio locale
+## Controlli
+
+### Desktop (Mouse + Tastiera)
+
+- **WASD** → Movimento
+- **Mouse** → Mira e sparo
+- **1 / 2 / 3** → Cambia arma (Rifle / Pistol / Fists)
+- **R** → Ricarica (quando non si usano i pugni)
+- **ESC** (tenuto 1.5 secondi) → Suicidio e ritorno al menu di spawn
+
+### Mobile (Touch)
+
+- **Joystick sinistro** → Movimento
+- **Joystick destro** → Mira e sparo automatico
+- **Pulsanti in basso** → Cambio arma (AR / PI / FI) e Ricarica
+
+---
+
+## Tecnologie Utilizzate
+
+### Client
+- **Kaboom.js** – Motore grafico 2D
+- **Socket.IO** – Comunicazione in tempo reale
+- **Web Audio API** – Effetti sonori procedurali
+- HTML5 Canvas + CSS per overlay UI
+
+### Server
+- **Node.js**
+- **Express**
+- **Socket.IO** (con namespace dedicati per lobby)
+- Fisica e logica di gioco lato server per anti-cheat di base
+
+---
+
+## Struttura del Progetto
+
+```
+Shooter-Online/
+├── client/                  # Tutti i file frontend
+│   ├── index.html
+│   ├── main.js             # Entry point
+│   ├── state.js
+│   ├── game.js
+│   ├── weapons.js
+│   ├── hud.js
+│   ├── menu.js
+│   ├── lobby.js
+│   ├── touch.js
+│   ├── audio.js
+│   └── lib/kaboom.mjs
+├── server.js                # Backend completo
+├── package.json
+└── README.md
+```
+
+---
+
+## Come Avviare il Progetto
 
 ### Prerequisiti
-
-- Node.js 18+
-- npm
+- Node.js (v18 o superiore)
 
 ### Installazione
 
 ```bash
-git clone https://github.com/tuo-username/shooter-online.git
-cd shooter-online
+# Clona il repository
+git clone <url-del-tuo-repo>
+cd Shooter-Online
+
+# Installa le dipendenze
 npm install
-npm start
 ```
 
-Il server si avvia sulla porta `4000` (o sulla porta definita dalla variabile d'ambiente `PORT`).  
-Apri il browser su `http://localhost:4000`.
+### Avvio in Sviluppo
 
----
-
-## Deploy su Render
-
-1. Crea un account su [render.com](https://render.com)
-2. **New → Web Service** → connetti la tua repo GitHub
-3. Impostazioni:
-   - **Runtime:** Node
-   - **Build Command:** `npm install`
-   - **Start Command:** `npm start`
-4. Nella sezione **Environment**, aggiungi la variabile:
-   - `RENDER_EXTERNAL_URL` → l'URL del tuo servizio (es. `https://shooter-online.onrender.com`)  
-     Serve per il keep-alive automatico ogni 10 minuti (evita lo sleep del piano gratuito)
-
----
-
-## Funzionalità
-
-### Lobby
-
-- Crea lobby pubblica o privata (con password)
-- Lista lobby in tempo reale aggiornata via Socket.IO
-- Massimo 8 giocatori per lobby
-- Massimo 20 lobby attive contemporaneamente sul server
-- Nickname generati automaticamente (es. `ShadowWolf`, `IronFalcon`)
-- Cleanup automatico dopo 5 minuti di lobby vuota
-
-### Rejoin
-
-Se la connessione cade, il client salva un token in `localStorage` e al ricaricamento della pagina tenta automaticamente il rejoin nella stessa lobby, recuperando kills e deaths.
-
-### Mappa
-
-- 5000×5000 px
-- 80 rocce (collidono), 60 alberi (collidono), 70 cespugli (decorativi)
-- Generazione procedurale seed-based — diversa a ogni lobby
-
----
-
-## Variabili d'ambiente
-
-| Variabile | Descrizione | Default |
-|-----------|-------------|---------|
-| `PORT` | Porta del server | `4000` |
-| `RENDER_EXTERNAL_URL` | URL pubblico per il keep-alive | — |
-
----
-
-## Dipendenze
-
-```json
-{
-  "express": "^4.18.2",
-  "socket.io": "^4.7.1"
-}
+```bash
+node server.js
 ```
+
+Apri il browser e vai su:  
+**`http://localhost:4000`**
+
+---
+
+## Funzionalità Avanzate
+
+- **Rejoin Token**: se ti disconnetti, hai 5 minuti per rientrare con le stesse statistiche
+- **Lobby private** con password
+- **Minimappa** in tempo reale
+- **Barre nere (letterbox)** automatiche per mantenere il rapporto 16:9
+- **Auto-reload** della pagina al primo caricamento (risolve problemi di Kaboom)
+
+---
+
+## Note di Sviluppo
+
+- Tutti i suoni sono **sintetizzati** (nessun file audio esterno)
+- Il server gestisce la fisica e la validazione degli spari
+- Il client interpola il movimento per una sensazione più fluida
+- L'arma corpo a corpo si chiama **Fists** in tutto il codice e nell'interfaccia
+
+---
+
+## Possibili Miglioramenti Futuri
+
+- Sistema di power-up
+- Diverse mappe
+- Modalità a squadre
+- Statistiche persistenti
+- Skin per i giocatori
+- Chat in-game
 
 ---
 
 ## Licenza
 
-MIT
+Questo progetto è stato creato per scopi educativi e di divertimento.  
+Sentiti libero di modificarlo e migliorarlo.
+
+---
