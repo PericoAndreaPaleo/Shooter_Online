@@ -90,7 +90,7 @@ export function creaGunDrawObj() {
                         drawCircle({ pos: vec2(handX, handY), radius,             color: rgb(222, 196, 145) });
                     };
 
-                    // ── KARAMBIT (mani nude / coltello) ─────────────────────────
+                    // ── fists (mani nude) ─────────────────────────
                     if (weaponType === "fists") {
                         // Calcola l'avanzamento animato del pugno
                         let punchForwardOffset = 0;  // pixel extra avanti durante il pugno

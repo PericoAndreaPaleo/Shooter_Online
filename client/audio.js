@@ -92,11 +92,11 @@ export const playHitSound = () => playGenericSound("hit", 600, 100, 0.15, "sawto
 export const playKillSound = () => playGenericSound("kill", 880, 1100, 0.2, "sine");
 
 /**
- * Suono del karambit (corpo a corpo) — colpo corto e sordo.
+ * Suono dei fists (corpo a corpo) — colpo corto e sordo.
  * Onda a dente di sega con forte discesa: simula un impatto fisico.
  * Durata: ~80ms.
  */
-export function playKnifeSound() {
+export function playFistsSound() {
     try {
         const ctx        = getAudioContext();
         const oscillator = ctx.createOscillator();

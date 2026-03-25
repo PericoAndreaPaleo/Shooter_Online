@@ -30,7 +30,7 @@ let aimJoystickTouchId   = null;
 let aimJoystickCenter    = { x: 0, y: 0 };
 
 // ── Riferimenti ai bottoni UI ────────────────────────────────
-let weaponButtonElements = [];    // bottoni cambio arma [AR, PI, KN]
+let weaponButtonElements = [];    // bottoni cambio arma [AR, PI, FI]
 let reloadButtonElement  = null;  // bottone ricarica [R]
 
 // ============================================================
@@ -184,7 +184,7 @@ export function creaTouchUI() {
         const weaponConfigs = [
             { key: "gun",   label: "AR", color: "#e55" },
             { key: "pistol", label: "PI", color: "#e93" },
-            { key: "fists",  label: "KN", color: "#333" },
+            { key: "fists",  label: "FI", color: "#333" },
         ];
 
         weaponConfigs.forEach((weapon, index) => {

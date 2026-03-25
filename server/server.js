@@ -54,7 +54,7 @@ const PLAYER_MAX_HP = 100;
 const DAMAGE_BY_WEAPON = {
     gun:   25,   // fucile d'assalto
     pistol: 15,  // pistola
-    fists: 100,  // karambit (corpo a corpo, 1 hit kill)
+    fists: 100,  // fists (corpo a corpo, 1 hit kill)
 };
 
 /** Millisecondi minimi tra uno sparo e il successivo (cooldown) */
@@ -552,7 +552,7 @@ function createLobby(lobbyId, lobbyName, password) {
             if (now - player.lastShotTime < cooldown) return;
             player.lastShotTime = now;
 
-            // ── KARAMBIT (corpo a corpo) ─────────────────────────
+            // ── fists (corpo a corpo) ─────────────────────────
             if (player.weapon === "fists") {
                 player.punchCount = (player.punchCount || 0) + 1;
                 player.punchFlash = true;

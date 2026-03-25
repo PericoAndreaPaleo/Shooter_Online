@@ -11,7 +11,7 @@
 // ============================================================
 
 import { state, GAME_W, GAME_H, hx, hy, hs, isMobile, cambiaArma } from "./state.js";
-import { playShootSound, playHitSound, playKillSound, playKnifeSound, playDeathSound } from "./audio.js";
+import { playShootSound, playHitSound, playKillSound, playFistsSound, playDeathSound } from "./audio.js";
 import {
     aggiornaHUDStats, aggiornaHUDAmmo, aggiornaHUDArma, aggiornaHUDPlayers,
     aggiornaLeaderboard, mostraKillFeed, killFeedList, killFeedObjs,
@@ -194,7 +194,7 @@ let localPunchCount = 0;
 
 /** Timestamp dell'ultimo sparo con pistola */
 let lastPistolShotTime   = 0;
-/** Timestamp dell'ultimo sparo automatico (fucile/karambit) */
+/** Timestamp dell'ultimo sparo automatico (fucile/fists) */
 let lastAutoFireTime     = 0;
 /** true se il tasto sinistro del mouse è premuto */
 let isMouseButtonHeld    = false;
@@ -202,7 +202,7 @@ let isMouseButtonHeld    = false;
 /**
  * Spara con il mouse: calcola direzione verso il cursore e
  * invia "shoot" al server. Gestisce il cooldown della pistola.
- * Per il karambit, suona e anima la mano.
+ * Per i fists, suona e anima la mano.
  */
 export function shoot() {
     // Controlli di guardia: non sparare se in menu, morto, senza socket, ecc.
@@ -242,7 +242,7 @@ export function shoot() {
     if (state.weapon !== "fists") {
         playShootSound();
     } else {
-        playKnifeSound();
+        playFistsSound();
         localPunchCount++;
         // Mano destra se dispari, sinistra se pari
         triggerPunch(state.myId, localPunchCount % 2 === 1 ? 1 : 0);
@@ -272,7 +272,7 @@ function shootWithTouchJoystick() {
     if (state.weapon !== "fists") {
         playShootSound();
     } else {
-        playKnifeSound();
+        playFistsSound();
         localPunchCount++;
         triggerPunch(state.myId, localPunchCount % 2 === 1 ? 1 : 0);
     }
@@ -287,7 +287,7 @@ function shootWithTouchJoystick() {
 export function registraEventiSparo(canvas) {
 
     // ── Loop di fuoco automatico ─────────────────────────────────
-    // Gestisce: fuoco tenuto (fucile/karambit) + joystick touch
+    // Gestisce: fuoco tenuto (fucile/fists) + joystick touch
     function autoFireLoop() {
         const now = performance.now();
 

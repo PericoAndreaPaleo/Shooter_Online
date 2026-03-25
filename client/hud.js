@@ -110,7 +110,7 @@ export function aggiornaHUDArma() {
     if (state.inLobbyScreen) return;
     if (isMobile()) return; // su mobile ci sono i bottoni touch
 
-    const weaponNames     = { gun: "Rifle", pistol: "Pistol", fists: "Knife" };
+    const weaponNames     = { gun: "Rifle", pistol: "Pistol", fists: "Fists" };
     const weaponSlotOrder = ["gun", "pistol", "fists"];
 
     hudWeaponSlotObj = add([
@@ -172,7 +172,7 @@ export function aggiornaHUDArma() {
 /** Ricrea il widget munizioni. Chiamare dopo ogni sparo o cambio arma. */
 export function aggiornaHUDAmmo() {
     if (hudAmmoObj) { destroy(hudAmmoObj); hudAmmoObj = null; }
-    if (state.weapon === "fists") return; // karambit: munizioni infinite, non mostrare
+    if (state.weapon === "fists") return; // fists: munizioni infinite, non mostrare
 
     const currentAmmo = state.myAmmo[state.weapon] ?? 0;
     const maxAmmo     = state.weapon === "gun" ? 30 : 15;
