@@ -25,6 +25,15 @@ const keyMap = { a: "left", d: "right", w: "up", s: "down" };
 
 export function registraInputTastiera() {
     window.addEventListener("keydown", e => {
+        // ESC — torna al menu (solo se in gioco e vivo)
+        if (e.key === "Escape" && !state.inMenu && !state.inLobbyScreen &&
+            state.myId && state.players[state.myId] && !state.players[state.myId].morto) {
+            // Azzera input per non restare bloccato in movimento
+            Object.assign(state.input, { left: false, right: false, up: false, down: false });
+            if (state.socket) state.socket.emit("input", state.input);
+            _mostraMenu();
+            return;
+        }
         if (state.inMenu || state.inLobbyScreen) return;
         const dir = keyMap[e.key.toLowerCase()];
         if (dir && !state.input[dir]) { state.input[dir] = true; state.socket.emit("input", state.input); }

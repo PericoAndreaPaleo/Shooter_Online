@@ -47,7 +47,7 @@ export function aggiornaHUDArma() {
     if (hudWeaponObj) { destroy(hudWeaponObj); hudWeaponObj = null; }
     if (state.inLobbyScreen) return;
     if (isMobile()) return;
-    const names = { gun: "Rifle", pistol: "Pistol", fists: "Fists" };
+    const names = { gun: "Rifle", pistol: "Pistol", fists: "Knife" };
     const keys  = ["gun", "pistol", "fists"];
     hudWeaponObj = add([fixed(), z(100), {
         draw() {
@@ -210,4 +210,83 @@ export function aggiornaLeaderboard(lb) {
             });
         }
     }]));
+}
+
+// ========================
+// MINIMAPPA
+// ========================
+let minimapObj = null;
+
+export function creaMinimappa() {
+    if (minimapObj) destroy(minimapObj);
+    minimapObj = add([fixed(), z(150), {
+        draw() {
+            if (state.inMenu || state.inLobbyScreen || !state.myId) return;
+            if (!state.players[state.myId] || state.players[state.myId].morto) return;
+
+            const MAP_W = state.mapSize.width;
+            const MAP_H = state.mapSize.height;
+
+            // Dimensione e posizione minimappa (angolo in basso a destra)
+            const MM_SIZE = hs(130);
+            const PAD     = hs(10);
+            const bx = hx(GAME_W) - MM_SIZE - PAD;
+            const by = hy(GAME_H) - MM_SIZE - PAD - hs(50); // sopra l'HUD ammo
+
+            const scaleX = MM_SIZE / MAP_W;
+            const scaleY = MM_SIZE / MAP_H;
+
+            // Converte coordinate mondo → minimappa
+            const wx = (worldX) => bx + worldX * scaleX;
+            const wy = (worldY) => by + worldY * scaleY;
+
+            // ── Sfondo ──
+            drawRect({ pos: vec2(bx - 2, by - 2), width: MM_SIZE + 4, height: MM_SIZE + 4,
+                radius: hs(4), color: rgb(0, 0, 0), opacity: 0.75 });
+            // Terreno verde
+            drawRect({ pos: vec2(bx, by), width: MM_SIZE, height: MM_SIZE,
+                radius: hs(3), color: rgb(45, 100, 35), opacity: 0.9 });
+            // Bordo sabbia (sottile fascia)
+            drawRect({ pos: vec2(bx, by), width: MM_SIZE, height: MM_SIZE,
+                radius: hs(3), color: rgb(0, 0, 0), opacity: 0 }); // placeholder clip
+
+            // ── Ostacoli ──
+            for (const o of state.ostacoli) {
+                const ox = wx(o.x), oy = wy(o.y);
+                // Solo se dentro la minimappa
+                if (ox < bx || ox > bx + MM_SIZE || oy < by || oy > by + MM_SIZE) continue;
+                const r = Math.max(1.5, o.r * scaleX);
+                if (o.type === "roccia") {
+                    drawCircle({ pos: vec2(ox, oy), radius: r, color: rgb(100, 100, 105), opacity: 0.85 });
+                } else if (o.type === "albero") {
+                    drawCircle({ pos: vec2(ox, oy), radius: r, color: rgb(20, 65, 15), opacity: 0.9 });
+                } else if (o.type === "cespuglio") {
+                    drawCircle({ pos: vec2(ox, oy), radius: Math.max(1, r * 0.6), color: rgb(60, 130, 30), opacity: 0.6 });
+                }
+            }
+
+            // ── Il mio player — punto azzurro con freccia di direzione ──
+            const me = state.players[state.myId];
+            if (me && me.sprite) {
+                const mx = wx(me.sprite.pos.x), my = wy(me.sprite.pos.y);
+                // Alone
+                drawCircle({ pos: vec2(mx, my), radius: hs(6), color: rgb(0, 180, 255), opacity: 0.25 });
+                // Punto principale
+                drawCircle({ pos: vec2(mx, my), radius: hs(4.5), color: rgb(0, 0, 0) });
+                drawCircle({ pos: vec2(mx, my), radius: hs(3.5), color: rgb(0, 220, 255) });
+                // Freccia direzione
+                const angle = me.dirIndicator ? me.dirIndicator.angle || 0 : 0;
+                const arrowLen = hs(7);
+                drawLine({
+                    p1: vec2(mx, my),
+                    p2: vec2(mx + Math.cos(angle) * arrowLen, my + Math.sin(angle) * arrowLen),
+                    width: hs(1.5), color: rgb(255, 255, 255)
+                });
+            }
+
+            // ── Bordo esterno ──
+            drawRect({ pos: vec2(bx, by), width: MM_SIZE, height: MM_SIZE,
+                radius: hs(3), color: rgb(255, 255, 255), opacity: 0.15 });
+        }
+    }]);
 }

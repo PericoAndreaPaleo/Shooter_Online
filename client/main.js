@@ -42,7 +42,7 @@ drawOverlay();
 // perché kaboom() sopra le registra sul globalThis in modo sincrono.
 // ========================
 import { state, calcolaZoom, isMobile, setWeaponChangeCallback } from "./state.js";
-import { aggiornaBlackBars, aggiornaHUDArma, aggiornaHUDStats, aggiornaHUDLobby, aggiornaHUDPlayers, aggiornaHUDAmmo, mostraKillFeed } from "./hud.js";
+import { aggiornaBlackBars, aggiornaHUDArma, aggiornaHUDStats, aggiornaHUDLobby, aggiornaHUDPlayers, aggiornaHUDAmmo, mostraKillFeed, creaMinimappa } from "./hud.js";
 import { mostraSchermataLobby, registraEventiLobby, initLobby } from "./lobby.js";
 import { mostraMenu, initMenu } from "./menu.js";
 import { creaGunDrawObj } from "./weapons.js";
@@ -110,6 +110,7 @@ function connettiALobby(lobbyId, lobbyName, token) {
         state.myNickname  = nickname;
         state.mapSize     = mappa;
         state.inLobbyScreen = false;
+        state.ostacoli = ostacoli;
 
         localStorage.setItem("lobbyToken", token);
         localStorage.setItem("lobbyId",    lid);
@@ -137,6 +138,7 @@ function connettiALobby(lobbyId, lobbyName, token) {
         aggiornaHUDPlayers(playerCount, maxPlayers); aggiornaHUDAmmo();
         aggiornaBlackBars();
         creaGunDrawObj();
+        creaMinimappa();
         onResize(() => { aggiornaHUDArma(); aggiornaHUDStats(); aggiornaHUDLobby(); });
         mostraMenu();
     });

@@ -15,6 +15,7 @@ export const state = {
     myToken: null,
     myNickname: "",
     mapSize: { width: 5000, height: 5000 },
+    ostacoli: [],
     cameraInizializzata: false,
     inMenu: true,
     inLobbyScreen: true,
