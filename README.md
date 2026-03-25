@@ -11,6 +11,7 @@ Supporta più lobby simultanee, gioco su mobile con joystick virtuale, lobby pri
 - Tasto sinistro del mouse per sparare (auto-fire con il mitra)
 - **R** per ricaricare
 - Tasti **1 / 2 / 3** per cambiare arma
+- **Tieni premuto ESC per 1.5 secondi** per uscire dalla partita e tornare al menù
 - Su mobile: joystick sinistro per muoversi, joystick destro per mirare e sparare
 
 ### Armi
@@ -19,7 +20,7 @@ Supporta più lobby simultanee, gioco su mobile con joystick virtuale, lobby pri
 |------|-------|---------|-----------|
 | Mitra (`gun`) | 25 | Auto 100ms | 30 |
 | Pistola (`pistol`) | 15 | Semi 200ms | 15 |
-| Pugni (`fists`) | 100 | 200ms | ∞ |
+| Coltello (`fists`) | 100 | 800ms | ∞ |
 
 - Rigenerazione HP automatica dopo 4 secondi senza ricevere danni
 - HP massimi: 100
@@ -83,6 +84,7 @@ Apri il browser su `http://localhost:4000`.
 - Crea lobby pubblica o privata (con password)
 - Lista lobby in tempo reale aggiornata via Socket.IO
 - Massimo 8 giocatori per lobby
+- Massimo 20 lobby attive contemporaneamente sul server
 - Nickname generati automaticamente (es. `ShadowWolf`, `IronFalcon`)
 - Cleanup automatico dopo 5 minuti di lobby vuota
 
