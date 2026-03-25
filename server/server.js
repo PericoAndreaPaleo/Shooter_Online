@@ -1,377 +1,681 @@
-const express = require("express");
-const http = require("http");
-const { Server } = require("socket.io");
-const crypto = require("crypto");
+// ============================================================
+// SERVER — Shooter Online
+// Stack: Express + Socket.IO + Node.js
+//
+// Architettura:
+//   • Il socket "principale" (io) gestisce SOLO la lista lobby,
+//     la creazione e il join.
+//   • Ogni lobby ottiene un namespace dedicato (/lobby/<id>)
+//     che gestisce tutto il gameplay (input, sparo, fisica, ecc.)
+//   • Il game loop (setInterval) aggiorna fisica e proiettili
+//     per tutte le lobby attive e fa broadcast dello stato.
+// ============================================================
 
-const app = express();
+const express = require("express");
+const http    = require("http");
+const { Server } = require("socket.io");
+const crypto  = require("crypto");
+
+const app    = express();
 const server = http.createServer(app);
+
+// Abilita CORS da qualsiasi origine (utile in sviluppo / deploy su Render)
 const io = new Server(server, { cors: { origin: "*" } });
 
+// Serve la cartella "client" come root statica
 app.use(express.static("client"));
 
-// ========================
-// KEEP-ALIVE (Render)
-// ========================
+// ============================================================
+// KEEP-ALIVE PER RENDER.COM
+// Render mette in standby i server gratuiti dopo 15 min di
+// inattività. Facciamo un ping ogni 10 minuti a noi stessi.
+// ============================================================
 const RENDER_URL = process.env.RENDER_EXTERNAL_URL;
 if (RENDER_URL) {
-    setInterval(() => { fetch(RENDER_URL).catch(() => {}); }, 10 * 60 * 1000);
+    setInterval(() => {
+        fetch(RENDER_URL).catch(() => {}); // ignoriamo eventuali errori di rete
+    }, 10 * 60 * 1000); // ogni 10 minuti
 }
 
-// ========================
-// COSTANTI
-// ========================
-const map = { width: 5000, height: 5000 };
-const PLAYER_RADIUS = 20;
-const PLAYER_MAX_HP = 100;
-const DAMAGE_BY_WEAPON    = { gun: 25, pistol: 15, fists: 100 };
-const COOLDOWN_BY_WEAPON  = { gun: 100, pistol: 200, fists: 800 };
-const RANGE_BY_WEAPON     = { gun: null, pistol: null, fists: 80 }; // raggio corpo a corpo
-const MAX_AMMO = { gun: 30, pistol: 15, fists: 0 };
-const RELOAD_TIME = { gun: 2000, pistol: 1500 };
-const SPEED = 300;
-const SPEED_PROIETTILE = 1750;
-const BULLET_LIFETIME = 1.2;
-const MAX_PLAYERS = 8;
-const MAX_LOBBIES = 20;
-const REJOIN_TTL = 5 * 60 * 1000; // 5 minuti per fare rejoin
+// ============================================================
+// COSTANTI DI GIOCO
+// ============================================================
 
-// ========================
-// NICKNAME CASUALI
-// ========================
-const AGGETTIVI = ["Red","Blue","Dark","Wild","Iron","Gold","Shadow","Frost","Storm","Toxic",
-    "Ghost","Blaze","Steel","Neon","Brave","Savage","Swift","Quiet","Lone","Cyber"];
-const SOSTANTIVI = ["Wolf","Fox","Bear","Eagle","Shark","Tiger","Hawk","Lynx","Viper","Raven",
-    "Cobra","Puma","Bison","Falcon","Otter","Moose","Drake","Hyena","Jaguar","Wyvern"];
+/** Dimensioni della mappa di gioco (in pixel-mondo) */
+const MAP_SIZE = { width: 5000, height: 5000 };
+
+/** Raggio del cerchio-collisore di ogni giocatore */
+const PLAYER_RADIUS = 20;
+
+/** Punti vita massimi di ogni giocatore */
+const PLAYER_MAX_HP = 100;
+
+/** Danno inflitto da ciascuna arma ad ogni colpo */
+const DAMAGE_BY_WEAPON = {
+    gun:   25,   // fucile d'assalto
+    pistol: 15,  // pistola
+    fists: 100,  // karambit (corpo a corpo, 1 hit kill)
+};
+
+/** Millisecondi minimi tra uno sparo e il successivo (cooldown) */
+const FIRE_COOLDOWN_MS = {
+    gun:   100,
+    pistol: 200,
+    fists:  800,
+};
+
+/** Raggio di attacco corpo-a-corpo (null = solo proiettili) */
+const MELEE_RANGE = {
+    gun:   null,
+    pistol: null,
+    fists:  80,
+};
+
+/** Munizioni massime per ogni arma (0 = arma corpo a corpo, infinita) */
+const MAX_AMMO = {
+    gun:   30,
+    pistol: 15,
+    fists:   0,
+};
+
+/** Durata ricarica in millisecondi per ciascuna arma */
+const RELOAD_TIME_MS = {
+    gun:   2000,
+    pistol: 1500,
+};
+
+/** Velocità di movimento del giocatore (pixel/secondo) */
+const PLAYER_SPEED = 300;
+
+/** Velocità dei proiettili (pixel/secondo) */
+const BULLET_SPEED = 1750;
+
+/** Secondi di vita di un proiettile prima di scomparire */
+const BULLET_LIFETIME_SEC = 1.2;
+
+/** Numero massimo di giocatori per lobby */
+const MAX_PLAYERS = 8;
+
+/** Numero massimo di lobby contemporanee sul server */
+const MAX_LOBBIES = 20;
+
+/**
+ * Millisecondi in cui un token di rejoin rimane valido.
+ * Se un giocatore si disconnette, ha 5 minuti per riconnettersi
+ * mantenendo nickname e statistiche.
+ */
+const REJOIN_TOKEN_TTL = 5 * 60 * 1000; // 5 minuti
+
+// ============================================================
+// GENERAZIONE NICKNAME CASUALI
+// ============================================================
+
+/** Aggettivi usati come prefisso del nickname */
+const NICKNAME_ADJECTIVES = [
+    "Red","Blue","Dark","Wild","Iron","Gold","Shadow","Frost","Storm","Toxic",
+    "Ghost","Blaze","Steel","Neon","Brave","Savage","Swift","Quiet","Lone","Cyber",
+];
+
+/** Sostantivi usati come suffisso del nickname */
+const NICKNAME_NOUNS = [
+    "Wolf","Fox","Bear","Eagle","Shark","Tiger","Hawk","Lynx","Viper","Raven",
+    "Cobra","Puma","Bison","Falcon","Otter","Moose","Drake","Hyena","Jaguar","Wyvern",
+];
+
+/** Insieme dei nickname attualmente in uso (per evitare duplicati) */
 const usedNicknames = new Set();
 
-function generaNickname() {
-    for (let i = 0; i < 200; i++) {
-        const a = AGGETTIVI[Math.floor(Math.random() * AGGETTIVI.length)];
-        const s = SOSTANTIVI[Math.floor(Math.random() * SOSTANTIVI.length)];
-        const n = `${a}${s}`;
-        if (!usedNicknames.has(n)) { usedNicknames.add(n); return n; }
+/**
+ * Genera un nickname casuale univoco del tipo "BlazeFalcon".
+ * Prova fino a 200 combinazioni; in caso di esaurimento usa "Player<4 cifre>".
+ * @returns {string} Nickname univoco
+ */
+function generateNickname() {
+    for (let attempt = 0; attempt < 200; attempt++) {
+        const adjective = NICKNAME_ADJECTIVES[Math.floor(Math.random() * NICKNAME_ADJECTIVES.length)];
+        const noun      = NICKNAME_NOUNS[Math.floor(Math.random() * NICKNAME_NOUNS.length)];
+        const candidate = `${adjective}${noun}`;
+        if (!usedNicknames.has(candidate)) {
+            usedNicknames.add(candidate);
+            return candidate;
+        }
     }
+    // Fallback se tutte le combinazioni sono occupate
     return "Player" + Math.floor(Math.random() * 9000 + 1000);
 }
 
-// ========================
-// MAPPA
-// ========================
-function seededRandom(seed) {
-    let s = seed;
-    return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
+// ============================================================
+// GENERAZIONE MAPPA PROCEDURALE
+// ============================================================
+
+/**
+ * Crea un generatore di numeri pseudo-casuali deterministico
+ * basato sul seed fornito (algoritmo LCG – Park-Miller).
+ * Lo stesso seed produce sempre la stessa sequenza.
+ * @param {number} seed - Seme iniziale
+ * @returns {function(): number} Funzione che restituisce valori in [0, 1)
+ */
+function createSeededRng(seed) {
+    let state = seed;
+    return () => {
+        state = (state * 16807) % 2147483647;
+        return (state - 1) / 2147483646;
+    };
 }
 
-function generaMappa() {
-    const ostacoli = [];
-    const rng = seededRandom(Math.floor(Math.random() * 999999));
+/**
+ * Genera un array di ostacoli (rocce, alberi, cespugli) con
+ * posizioni pseudo-casuali ma ripetibili tramite seed.
+ * @returns {Array<Object>} Lista degli ostacoli della mappa
+ */
+function generateMapObstacles() {
+    const obstacles = [];
+    const rng = createSeededRng(Math.floor(Math.random() * 999999));
+
+    // 80 rocce — solide, bloccano movimento e proiettili
     for (let i = 0; i < 80; i++) {
-        const r = 25 + rng() * 35;
-        ostacoli.push({ x: rng() * map.width, y: rng() * map.height, r, rCollisione: r, type: "roccia" });
+        const radius = 25 + rng() * 35;
+        obstacles.push({
+            x: rng() * MAP_SIZE.width,
+            y: rng() * MAP_SIZE.height,
+            r: radius,
+            rCollisione: radius, // raggio di collisione = raggio visivo
+            type: "roccia",
+        });
     }
+
+    // 60 alberi — solidi, ma il tronco è più stretto del fogliame
     for (let i = 0; i < 60; i++) {
-        const r = 35 + rng() * 50;
-        ostacoli.push({ x: rng() * map.width, y: rng() * map.height, r, rCollisione: Math.max(10, r / 3), type: "albero" });
+        const radius = 35 + rng() * 50;
+        obstacles.push({
+            x: rng() * MAP_SIZE.width,
+            y: rng() * MAP_SIZE.height,
+            r: radius,
+            rCollisione: Math.max(10, radius / 3), // solo il tronco è solido
+            type: "albero",
+        });
     }
+
+    // 70 cespugli — puramente decorativi, non bloccano nulla
     for (let i = 0; i < 70; i++) {
-        ostacoli.push({ x: rng() * map.width, y: rng() * map.height, r: 20 + rng() * 30, type: "cespuglio" });
+        obstacles.push({
+            x: rng() * MAP_SIZE.width,
+            y: rng() * MAP_SIZE.height,
+            r: 20 + rng() * 30,
+            // nessun rCollisione: i cespugli non hanno collisione
+            type: "cespuglio",
+        });
     }
-    return ostacoli;
+
+    return obstacles;
 }
 
-// ========================
-// FISICA
-// ========================
-function spawnPos(lobby) {
-    for (let t = 0; t < 30; t++) {
-        const x = 100 + Math.random() * (map.width - 200);
-        const y = 100 + Math.random() * (map.height - 200);
-        let ok = true;
+// ============================================================
+// FISICA — SPAWN E COLLISIONI
+// ============================================================
+
+/**
+ * Trova una posizione di spawn sicura per un giocatore nella lobby:
+ * lontana almeno 200px da ogni altro giocatore vivo.
+ * Prova fino a 30 volte; se non trova nulla di adatto, spawna a caso.
+ * @param {Object} lobby - La lobby corrente
+ * @returns {{x: number, y: number}} Coordinate di spawn
+ */
+function findSafeSpawnPosition(lobby) {
+    for (let attempt = 0; attempt < 30; attempt++) {
+        const x = 100 + Math.random() * (MAP_SIZE.width  - 200);
+        const y = 100 + Math.random() * (MAP_SIZE.height - 200);
+
+        let positionIsSafe = true;
         for (const id in lobby.players) {
-            if (lobby.players[id].morto) continue;
-            if (Math.hypot(x - lobby.players[id].pos.x, y - lobby.players[id].pos.y) < 200) { ok = false; break; }
+            const otherPlayer = lobby.players[id];
+            if (otherPlayer.isDead) continue;
+            if (Math.hypot(x - otherPlayer.pos.x, y - otherPlayer.pos.y) < 200) {
+                positionIsSafe = false;
+                break;
+            }
         }
-        if (ok) return { x, y };
+        if (positionIsSafe) return { x, y };
     }
-    return { x: 100 + Math.random() * (map.width - 200), y: 100 + Math.random() * (map.height - 200) };
+    // Fallback: spawn casuale senza controlli
+    return {
+        x: 100 + Math.random() * (MAP_SIZE.width  - 200),
+        y: 100 + Math.random() * (MAP_SIZE.height - 200),
+    };
 }
 
-function risolviCollisioni(p, ostacoliSolidi) {
-    p.pos.x = Math.max(PLAYER_RADIUS, Math.min(map.width  - PLAYER_RADIUS, p.pos.x));
-    p.pos.y = Math.max(PLAYER_RADIUS, Math.min(map.height - PLAYER_RADIUS, p.pos.y));
-    for (const o of ostacoliSolidi) {
-        const dx = p.pos.x - o.x, dy = p.pos.y - o.y;
+/**
+ * Risolve le collisioni tra un giocatore e i bordi della mappa
+ * e tra il giocatore e gli ostacoli solidi (rocce e tronchi).
+ * Applica un push-out circolare per ogni ostacolo sovrapposto.
+ * @param {Object} player        - Oggetto player con { pos: {x, y} }
+ * @param {Array}  solidObstacles - Ostacoli con rCollisione definito
+ */
+function resolvePlayerCollisions(player, solidObstacles) {
+    // 1ª passata: clamp ai bordi della mappa
+    player.pos.x = Math.max(PLAYER_RADIUS, Math.min(MAP_SIZE.width  - PLAYER_RADIUS, player.pos.x));
+    player.pos.y = Math.max(PLAYER_RADIUS, Math.min(MAP_SIZE.height - PLAYER_RADIUS, player.pos.y));
+
+    // Push-out da ogni ostacolo sovrapposto
+    for (const obstacle of solidObstacles) {
+        const dx   = player.pos.x - obstacle.x;
+        const dy   = player.pos.y - obstacle.y;
         const dist = Math.hypot(dx, dy);
-        const minD = PLAYER_RADIUS + o.rCollisione;
-        if (dist < minD && dist > 0) {
-            p.pos.x += (dx / dist) * (minD - dist);
-            p.pos.y += (dy / dist) * (minD - dist);
+        const minAllowedDist = PLAYER_RADIUS + obstacle.rCollisione;
+
+        if (dist < minAllowedDist && dist > 0) {
+            // Spingi il player verso l'esterno lungo la normale
+            const overlap = minAllowedDist - dist;
+            player.pos.x += (dx / dist) * overlap;
+            player.pos.y += (dy / dist) * overlap;
         }
     }
-    p.pos.x = Math.max(PLAYER_RADIUS, Math.min(map.width  - PLAYER_RADIUS, p.pos.x));
-    p.pos.y = Math.max(PLAYER_RADIUS, Math.min(map.height - PLAYER_RADIUS, p.pos.y));
+
+    // 2ª passata: reclamp dopo eventuali push-out
+    player.pos.x = Math.max(PLAYER_RADIUS, Math.min(MAP_SIZE.width  - PLAYER_RADIUS, player.pos.x));
+    player.pos.y = Math.max(PLAYER_RADIUS, Math.min(MAP_SIZE.height - PLAYER_RADIUS, player.pos.y));
 }
 
+// ============================================================
+// LEADERBOARD
+// ============================================================
+
+/**
+ * Restituisce la classifica della lobby ordinata per kill (desc),
+ * limitata ai primi 10 giocatori.
+ * @param {Object} lobby
+ * @returns {Array<Object>} Classifica ordinata
+ */
 function getLeaderboard(lobby) {
-    return Object.values(lobby.leaderboard).sort((a, b) => b.kills - a.kills).slice(0, 10);
+    return Object.values(lobby.leaderboard)
+        .sort((a, b) => b.kills - a.kills)
+        .slice(0, 10);
 }
 
-// ========================
-// LOBBIES
-// ========================
+// ============================================================
+// GESTIONE LOBBIES
+// ============================================================
+
+/** Mappa di tutte le lobby attive: { [lobbyId]: lobbyObject } */
 const lobbies = {};
 
-function getLobbyList() {
-    return Object.values(lobbies).map(l => ({
-        id: l.id, name: l.name,
-        players: Object.keys(l.players).length,
-        max: MAX_PLAYERS, createdAt: l.createdAt,
-        private: l.private,
+/**
+ * Crea e restituisce la lista delle lobby pubblica (senza password)
+ * da inviare ai client nella schermata di selezione.
+ * @returns {Array<Object>}
+ */
+function getLobbyListForClients() {
+    return Object.values(lobbies).map(lobby => ({
+        id:        lobby.id,
+        name:      lobby.name,
+        players:   Object.keys(lobby.players).length,
+        max:       MAX_PLAYERS,
+        createdAt: lobby.createdAt,
+        private:   lobby.isPrivate,
     }));
 }
 
+/**
+ * Emette la lista lobby aggiornata a TUTTI i client connessi
+ * al socket principale (non ai namespace delle lobby).
+ */
 function broadcastLobbyList() {
-    io.emit("lobbyList", getLobbyList());
+    io.emit("lobbyList", getLobbyListForClients());
 }
 
-function creaLobby(lobbyId, lobbyName, password) {
-    const ostacoli = generaMappa();
+/**
+ * Crea una nuova lobby, configura il suo namespace Socket.IO
+ * e registra tutti gli handler degli eventi di gameplay.
+ *
+ * @param {string}      lobbyId   - ID univoco (8 char hex)
+ * @param {string}      lobbyName - Nome visualizzato
+ * @param {string|null} password  - Password per lobby private (null = pubblica)
+ * @returns {Object} L'oggetto lobby creato
+ */
+function createLobby(lobbyId, lobbyName, password) {
+    const allObstacles   = generateMapObstacles();
+    const solidObstacles = allObstacles.filter(o => o.type !== "cespuglio");
+
     const lobby = {
-        id: lobbyId, name: lobbyName,
-        private: !!password,
-        password: password || null,
-        players: {},
-        tokens: {},
-        proiettili: [],
-        ostacoli,
-        ostacoliSolidi: ostacoli.filter(o => o.type !== "cespuglio"),
-        leaderboard: {},
+        id:           lobbyId,
+        name:         lobbyName,
+        isPrivate:    !!password,
+        password:     password || null,
+        players:      {},   // { [socketId]: playerObject }
+        rejoinTokens: {},   // { [token]: { nickname, kills, deaths, expireAt } }
+        bullets:      [],   // proiettili attivi
+        allObstacles,
+        solidObstacles,
+        leaderboard:  {},   // { [socketId]: { nickname, kills, deaths } }
         nextBulletId: 0,
-        lastTime: Date.now(),
-        createdAt: Date.now(),
-        nsp: null,
-        cleanupTimer: null,
+        lastTickTime: Date.now(),
+        createdAt:    Date.now(),
+        namespace:    null, // verrà impostato sotto
+        cleanupTimer: null, // timer per rimozione lobby vuota
     };
 
-    // ── Namespace dedicato ──
-    const nsp = io.of("/lobby/" + lobbyId);
-    lobby.nsp = nsp;
+    // ── Namespace Socket.IO dedicato a questa lobby ──────────────
+    const namespace = io.of("/lobby/" + lobbyId);
+    lobby.namespace = namespace;
 
-    nsp.on("connection", socket => {
-        // Annulla eventuale cleanup in corso (qualcuno è rientrato)
-        if (lobby.cleanupTimer) { clearTimeout(lobby.cleanupTimer); lobby.cleanupTimer = null; }
+    namespace.on("connection", (socket) => {
 
+        // Se qualcuno si (ri)connette, cancella il cleanup pianificato
+        if (lobby.cleanupTimer) {
+            clearTimeout(lobby.cleanupTimer);
+            lobby.cleanupTimer = null;
+        }
+
+        // ── join ─────────────────────────────────────────────────
+        // Il client emette "join" subito dopo la connessione,
+        // opzionalmente con un token per il rejoin.
         socket.on("join", (data) => {
+            // Ignora se il socket ha già un player assegnato
             if (socket.playerToken) return;
 
             let nickname, kills = 0, deaths = 0;
-            const token = data && data.token;
+            const incomingToken = data && data.token;
 
-            // Prova rejoin
-            if (token && lobby.tokens[token] && Date.now() < lobby.tokens[token].expireAt) {
-                const saved = lobby.tokens[token];
-                nickname = saved.nickname;
-                kills    = saved.kills;
-                deaths   = saved.deaths;
-                delete lobby.tokens[token];
+            // Prova rejoin con token valido
+            if (incomingToken && lobby.rejoinTokens[incomingToken] &&
+                Date.now() < lobby.rejoinTokens[incomingToken].expireAt) {
+
+                const savedData = lobby.rejoinTokens[incomingToken];
+                nickname = savedData.nickname;
+                kills    = savedData.kills;
+                deaths   = savedData.deaths;
+                delete lobby.rejoinTokens[incomingToken]; // token usato: rimuovi
                 console.log(`[${lobbyId}] rejoin: ${nickname}`);
+
             } else {
-                // Controlla capienza
+                // Nuovo giocatore: controlla capienza
                 if (Object.keys(lobby.players).length >= MAX_PLAYERS) {
                     socket.emit("lobbyFull");
                     socket.disconnect();
                     return;
                 }
-                nickname = generaNickname();
+                nickname = generateNickname();
             }
 
+            // Assegna token al socket per il futuro rejoin
             const newToken = crypto.randomBytes(16).toString("hex");
             socket.playerToken = newToken;
             socket.nickname    = nickname;
 
+            // Crea l'oggetto player (inizialmente "morto" — deve fare spawn)
             lobby.players[socket.id] = {
-                pos: spawnPos(lobby), dir: { x: 0, y: 0 },
-                angle: 0, hp: PLAYER_MAX_HP, morto: true,
-                nickname, lastShot: 0, hitFlash: false, lastHit: 0, weapon: "gun", punchCount: 0,
+                pos:        findSafeSpawnPosition(lobby),
+                dir:        { x: 0, y: 0 },  // direzione di movimento corrente
+                angle:      0,                 // angolo di mira (radianti)
+                hp:         PLAYER_MAX_HP,
+                isDead:     true,              // parte morto finché non fa "spawn"
+                nickname,
+                lastShotTime: 0,
+                hitFlash:   false,             // lampeggio quando colpito
+                lastHitTime: 0,
+                weapon:     "gun",
+                punchCount: 0,                 // contatore pugni (per animazione mani)
             };
+
+            // Inizializza voce in classifica
             lobby.leaderboard[socket.id] = { nickname, kills, deaths };
 
+            // Invia al client i dati iniziali della partita
             socket.emit("init", {
-                id: socket.id, token: newToken, map,
-                ostacoli: lobby.ostacoli, lobbyId, lobbyName: lobby.name,
-                nickname, playerCount: Object.keys(lobby.players).length, maxPlayers: MAX_PLAYERS,
+                id:          socket.id,
+                token:       newToken,
+                map:         MAP_SIZE,
+                ostacoli:    lobby.allObstacles,
+                lobbyId,
+                lobbyName:   lobby.name,
+                nickname,
+                playerCount: Object.keys(lobby.players).length,
+                maxPlayers:  MAX_PLAYERS,
             });
 
             broadcastLobbyList();
         });
 
+        // ── spawn ─────────────────────────────────────────────────
+        // Il client chiede di entrare in gioco dopo aver visto il menu.
         socket.on("spawn", () => {
-            const p = lobby.players[socket.id];
-            if (!p) return;
-            p.pos = spawnPos(lobby); p.hp = PLAYER_MAX_HP;
-            p.morto = false; p.dir = { x: 0, y: 0 }; p.angle = 0;
-            p.ammo = { gun: MAX_AMMO.gun, pistol: MAX_AMMO.pistol };
+            const player = lobby.players[socket.id];
+            if (!player) return;
+
+            player.pos    = findSafeSpawnPosition(lobby);
+            player.hp     = PLAYER_MAX_HP;
+            player.isDead = false;
+            player.dir    = { x: 0, y: 0 };
+            player.angle  = 0;
+            player.ammo   = { gun: MAX_AMMO.gun, pistol: MAX_AMMO.pistol };
         });
 
-        socket.on("input", (input) => {
-            const p = lobby.players[socket.id];
-            if (!p || p.morto || typeof input !== "object" || !input) return;
-            p.dir = {
-                x: (input.right ? 1 : 0) - (input.left ? 1 : 0),
-                y: (input.down  ? 1 : 0) - (input.up   ? 1 : 0),
+        // ── input ─────────────────────────────────────────────────
+        // Il client invia i tasti direzionali premuti ogni volta che cambiano.
+        socket.on("input", (inputData) => {
+            const player = lobby.players[socket.id];
+            if (!player || player.isDead || typeof inputData !== "object" || !inputData) return;
+
+            player.dir = {
+                x: (inputData.right ? 1 : 0) - (inputData.left ? 1 : 0),
+                y: (inputData.down  ? 1 : 0) - (inputData.up   ? 1 : 0),
             };
         });
 
+        // ── aim ───────────────────────────────────────────────────
+        // Il client invia l'angolo di mira (in radianti) quando muove il mouse.
         socket.on("aim", (angle) => {
-            const p = lobby.players[socket.id];
-            if (!p || p.morto || typeof angle !== "number" || !isFinite(angle)) return;
-            p.angle = angle;
+            const player = lobby.players[socket.id];
+            if (!player || player.isDead || typeof angle !== "number" || !isFinite(angle)) return;
+            player.angle = angle;
         });
 
-        socket.on("setWeapon", (w) => {
-            const p = lobby.players[socket.id];
-            if (!p || !["gun","pistol","fists"].includes(w)) return;
-            // Se si cambia arma durante una ricarica, annullala
-            if (p.reloading && p.weapon !== w) {
-                p.reloading = false;
-                if (p.reloadTimer) { clearTimeout(p.reloadTimer); p.reloadTimer = null; }
-                socket.emit("reloadCancelled", { weapon: p.weapon });
+        // ── setWeapon ─────────────────────────────────────────────
+        // Il client cambia arma (1/2/3 oppure bottoni touch).
+        socket.on("setWeapon", (weaponName) => {
+            const player = lobby.players[socket.id];
+            if (!player || !["gun", "pistol", "fists"].includes(weaponName)) return;
+
+            // Se si cambia arma durante una ricarica, la ricarica viene annullata
+            if (player.isReloading && player.weapon !== weaponName) {
+                player.isReloading = false;
+                if (player.reloadTimer) {
+                    clearTimeout(player.reloadTimer);
+                    player.reloadTimer = null;
+                }
+                socket.emit("reloadCancelled", { weapon: player.weapon });
             }
-            p.weapon = w;
+
+            player.weapon = weaponName;
         });
 
+        // ── reload ────────────────────────────────────────────────
+        // Il client richiede una ricarica manuale.
         socket.on("reload", () => {
-            const p = lobby.players[socket.id];
-            if (!p || p.morto || p.weapon === "fists") return;
-            if (!p.ammo) p.ammo = { gun: MAX_AMMO.gun, pistol: MAX_AMMO.pistol };
-            if (p.ammo[p.weapon] >= MAX_AMMO[p.weapon]) return;
-            if (p.reloading) return;
-            p.reloading = true;
-            const weaponAlReload = p.weapon;
-            socket.emit("reloadStart", { weapon: weaponAlReload, duration: RELOAD_TIME[weaponAlReload] });
-            p.reloadTimer = setTimeout(() => {
-                if (!p || !lobby.players[socket.id]) return;
-                // Completa solo se il player ha ancora la stessa arma
-                if (p.weapon !== weaponAlReload) return;
-                p.ammo[weaponAlReload] = MAX_AMMO[weaponAlReload];
-                p.reloading = false;
-                p.reloadTimer = null;
-                socket.emit("reloadDone", { weapon: weaponAlReload });
-            }, RELOAD_TIME[weaponAlReload]);
+            const player = lobby.players[socket.id];
+            if (!player || player.isDead || player.weapon === "fists") return;
+
+            // Inizializza munizioni se non presenti (compatibilità)
+            if (!player.ammo) player.ammo = { gun: MAX_AMMO.gun, pistol: MAX_AMMO.pistol };
+
+            // Non ricaricare se già a piena capienza o già in ricarica
+            if (player.ammo[player.weapon] >= MAX_AMMO[player.weapon]) return;
+            if (player.isReloading) return;
+
+            player.isReloading = true;
+            const weaponBeingReloaded = player.weapon;
+
+            // Notifica il client per mostrare la barra di ricarica
+            socket.emit("reloadStart", {
+                weapon:   weaponBeingReloaded,
+                duration: RELOAD_TIME_MS[weaponBeingReloaded],
+            });
+
+            // Completa la ricarica dopo il tempo previsto
+            player.reloadTimer = setTimeout(() => {
+                if (!player || !lobby.players[socket.id]) return;
+                // Completa solo se il giocatore ha ancora la stessa arma
+                if (player.weapon !== weaponBeingReloaded) return;
+
+                player.ammo[weaponBeingReloaded] = MAX_AMMO[weaponBeingReloaded];
+                player.isReloading = false;
+                player.reloadTimer = null;
+                socket.emit("reloadDone", { weapon: weaponBeingReloaded });
+            }, RELOAD_TIME_MS[weaponBeingReloaded]);
         });
 
+        // ── selfKill ──────────────────────────────────────────────
+        // Il client ha tenuto ESC premuto per 1.5s → suicidio volontario
+        // per tornare al menu di spawn.
         socket.on("selfKill", () => {
-            const p = lobby.players[socket.id];
-            if (!p || p.morto) return;
-            // Uccide il player come morte normale: il client riceve morto=true e va al menu
-            p.hp = 0; p.morto = true; p.dir = { x:0, y:0 };
-            if (lobby.leaderboard[socket.id]) lobby.leaderboard[socket.id].deaths++;
+            const player = lobby.players[socket.id];
+            if (!player || player.isDead) return;
+
+            player.hp     = 0;
+            player.isDead = true;
+            player.dir    = { x: 0, y: 0 };
+            if (lobby.leaderboard[socket.id]) {
+                lobby.leaderboard[socket.id].deaths++;
+            }
         });
 
+        // ── shoot ─────────────────────────────────────────────────
+        // Il client spara. Gestisce sia armi a fuoco (crea proiettile)
+        // che attacco corpo-a-corpo (hit scan immediato).
         socket.on("shoot", (data) => {
-            const p = lobby.players[socket.id];
-            if (!p || p.morto || !data || typeof data.dir !== "object") return;
-            const now = Date.now();
-            if (now - p.lastShot < (COOLDOWN_BY_WEAPON[p.weapon] ?? 100)) return;
-            p.lastShot = now;
+            const player = lobby.players[socket.id];
+            if (!player || player.isDead || !data || typeof data.dir !== "object") return;
 
-            // ── Karambit (corpo a corpo) ──
-            if (p.weapon === "fists") {
-                p.punchCount = (p.punchCount || 0) + 1;
-                p.punchFlash = true;
-                p.punchHand  = p.punchCount % 2; // 1=destra 0=sinistra
-                // Mani a 23+18+9+10 = ~60px, solo cono frontale +-90 gradi
-                const range = 60;
-                const punchAngle = p.angle;
-                for (const id in lobby.players) {
-                    if (id === socket.id) continue;
-                    const target = lobby.players[id];
-                    if (target.morto) continue;
-                    const dx = target.pos.x - p.pos.x;
-                    const dy = target.pos.y - p.pos.y;
+            // Controlla cooldown
+            const now = Date.now();
+            const cooldown = FIRE_COOLDOWN_MS[player.weapon] ?? 100;
+            if (now - player.lastShotTime < cooldown) return;
+            player.lastShotTime = now;
+
+            // ── KARAMBIT (corpo a corpo) ─────────────────────────
+            if (player.weapon === "fists") {
+                player.punchCount = (player.punchCount || 0) + 1;
+                player.punchFlash = true;
+                // Alterna mano destra (1) e sinistra (0)
+                player.punchHand = player.punchCount % 2;
+
+                const attackRange  = 60; // px di portata del pugno
+                const attackAngle  = player.angle;
+
+                for (const targetId in lobby.players) {
+                    if (targetId === socket.id) continue; // non colpire sé stessi
+                    const target = lobby.players[targetId];
+                    if (target.isDead) continue;
+
+                    const dx   = target.pos.x - player.pos.x;
+                    const dy   = target.pos.y - player.pos.y;
                     const dist = Math.hypot(dx, dy);
-                    if (dist > range) continue;
-                    let angleDiff = Math.atan2(dy, dx) - punchAngle;
+                    if (dist > attackRange) continue;
+
+                    // Verifica che il bersaglio sia nel cono frontale (±90°)
+                    let angleDiff = Math.atan2(dy, dx) - attackAngle;
                     while (angleDiff >  Math.PI) angleDiff -= 2 * Math.PI;
                     while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
                     if (Math.abs(angleDiff) > Math.PI / 2) continue;
-                    if (dist <= range) {
-                        target.hp -= DAMAGE_BY_WEAPON.fists;
-                        target.hitFlash = true;
-                        target.lastHit  = now;
-                        if (target.hp <= 0) {
-                            target.hp = 0; target.morto = true;
-                            target.dir = { x:0, y:0 };
-                            if (lobby.leaderboard[id])         lobby.leaderboard[id].deaths++;
-                            if (lobby.leaderboard[socket.id])  lobby.leaderboard[socket.id].kills++;
-                            lobby.nsp.to(socket.id).emit("killConfirm", { victim: target.nickname });
-                        }
+
+                    // Infliggi danno
+                    target.hp -= DAMAGE_BY_WEAPON.fists;
+                    target.hitFlash  = true;
+                    target.lastHitTime = now;
+
+                    if (target.hp <= 0) {
+                        target.hp     = 0;
+                        target.isDead = true;
+                        target.dir    = { x: 0, y: 0 };
+                        if (lobby.leaderboard[targetId])  lobby.leaderboard[targetId].deaths++;
+                        if (lobby.leaderboard[socket.id]) lobby.leaderboard[socket.id].kills++;
+                        lobby.namespace.to(socket.id).emit("killConfirm", { victim: target.nickname });
                     }
                 }
-                return;
+                return; // corpo a corpo: nessun proiettile da creare
             }
 
-            // ── Armi a fuoco ──
-            if (!p.ammo) p.ammo = { gun: MAX_AMMO.gun, pistol: MAX_AMMO.pistol };
-            if (p.ammo[p.weapon] <= 0) return;
-            if (p.reloading) return;
+            // ── ARMI A FUOCO ─────────────────────────────────────
+            if (!player.ammo) player.ammo = { gun: MAX_AMMO.gun, pistol: MAX_AMMO.pistol };
+            if (player.ammo[player.weapon] <= 0) return; // a secco
+            if (player.isReloading) return;              // sta ricaricando
+
             const { dir, tipOffset } = data;
             if (typeof dir.x !== "number" || typeof dir.y !== "number") return;
-            const len = Math.hypot(dir.x, dir.y);
-            if (!len || !isFinite(len)) return;
-            const nx = dir.x / len, ny = dir.y / len;
-            const ox = (tipOffset && Math.abs(tipOffset.x) < 100) ? tipOffset.x : 0;
-            const oy = (tipOffset && Math.abs(tipOffset.y) < 100) ? tipOffset.y : 0;
-            p.ammo[p.weapon]--;
-            lobby.proiettili.push({
-                id: lobby.nextBulletId++,
-                pos: { x: p.pos.x + ox, y: p.pos.y + oy },
-                dir: { x: nx, y: ny },
-                owner: socket.id, weapon: p.weapon, spawnTime: now,
+
+            // Normalizza la direzione del proiettile
+            const dirLength = Math.hypot(dir.x, dir.y);
+            if (!dirLength || !isFinite(dirLength)) return;
+            const normalizedDirX = dir.x / dirLength;
+            const normalizedDirY = dir.y / dirLength;
+
+            // Offset dalla canna dell'arma (già calcolato dal client)
+            const offsetX = (tipOffset && Math.abs(tipOffset.x) < 100) ? tipOffset.x : 0;
+            const offsetY = (tipOffset && Math.abs(tipOffset.y) < 100) ? tipOffset.y : 0;
+
+            player.ammo[player.weapon]--;
+
+            // Aggiunge il proiettile alla lista della lobby
+            lobby.bullets.push({
+                id:        lobby.nextBulletId++,
+                pos:       { x: player.pos.x + offsetX, y: player.pos.y + offsetY },
+                dir:       { x: normalizedDirX, y: normalizedDirY },
+                ownerId:   socket.id,
+                weapon:    player.weapon,
+                spawnTime: now,
             });
         });
 
+        // ── disconnect ────────────────────────────────────────────
+        // Gestisce la disconnessione: salva token di rejoin,
+        // pulisce stato, e schedula la rimozione della lobby se vuota.
         socket.on("disconnect", () => {
             console.log(`[${lobbyId}] disconnesso: ${socket.nickname || socket.id}`);
-            const lb = lobby.leaderboard[socket.id];
+            const leaderboardEntry = lobby.leaderboard[socket.id];
 
-            // Salva token per rejoin
+            // Salva dati per un eventuale rejoin (token valido 5 minuti)
             if (socket.playerToken) {
-                lobby.tokens[socket.playerToken] = {
+                lobby.rejoinTokens[socket.playerToken] = {
                     nickname: socket.nickname,
-                    kills:    lb ? lb.kills   : 0,
-                    deaths:   lb ? lb.deaths  : 0,
-                    expireAt: Date.now() + REJOIN_TTL,
+                    kills:    leaderboardEntry ? leaderboardEntry.kills  : 0,
+                    deaths:   leaderboardEntry ? leaderboardEntry.deaths : 0,
+                    expireAt: Date.now() + REJOIN_TOKEN_TTL,
                 };
                 usedNicknames.delete(socket.nickname);
             }
 
+            // Rimuove il player dalla lobby
             delete lobby.players[socket.id];
             delete lobby.leaderboard[socket.id];
-            lobby.proiettili = lobby.proiettili.filter(b => b.owner !== socket.id);
+            lobby.bullets = lobby.bullets.filter(b => b.ownerId !== socket.id);
 
-            nsp.emit("playerLeft", { id: socket.id, nickname: socket.nickname || "?" });
+            // Notifica gli altri giocatori
+            namespace.emit("playerLeft", {
+                id:       socket.id,
+                nickname: socket.nickname || "?",
+            });
 
             broadcastLobbyList();
 
-            // Se vuota, cancella dopo 5 minuti
+            // Se la lobby è rimasta vuota, pianifica la sua rimozione dopo 5 minuti.
+            // Se qualcuno si riconnette prima, il cleanupTimer viene cancellato nel "connection".
             if (Object.keys(lobby.players).length === 0) {
                 lobby.cleanupTimer = setTimeout(() => {
                     if (lobbies[lobbyId] && Object.keys(lobby.players).length === 0) {
-                        // Libera i nickname ancora salvati nei token non scaduti
-                        for (const t of Object.values(lobby.tokens)) {
-                            usedNicknames.delete(t.nickname);
+                        // Libera i nickname dei token non ancora scaduti
+                        for (const tokenData of Object.values(lobby.rejoinTokens)) {
+                            usedNicknames.delete(tokenData.nickname);
                         }
-                        nsp.disconnectSockets(true);
+                        namespace.disconnectSockets(true);
                         io._nsps.delete("/lobby/" + lobbyId);
                         delete lobbies[lobbyId];
                         console.log(`Lobby rimossa (vuota): ${lobbyId}`);
                         broadcastLobbyList();
                     }
-                }, REJOIN_TTL);
+                }, REJOIN_TOKEN_TTL);
             }
         });
-    });
+    }); // fine namespace.on("connection")
 
     lobbies[lobbyId] = lobby;
     broadcastLobbyList();
@@ -379,151 +683,216 @@ function creaLobby(lobbyId, lobbyName, password) {
     return lobby;
 }
 
-// ========================
-// SOCKET PRINCIPALE — solo selezione lobby
-// ========================
-io.on("connection", socket => {
-    socket.emit("lobbyList", getLobbyList());
+// ============================================================
+// SOCKET PRINCIPALE — selezione e creazione lobby
+// Il namespace di default "/" gestisce solo la lista lobby,
+// la creazione e il join. Il gameplay avviene nei namespace dedicati.
+// ============================================================
+io.on("connection", (socket) => {
 
+    // Invia subito la lista lobby corrente al client appena connesso
+    socket.emit("lobbyList", getLobbyListForClients());
+
+    // ── createLobby ───────────────────────────────────────────
     socket.on("createLobby", (data) => {
-        const rawName = (data && typeof data.name === "string" && data.name.trim())
+        // Sanifica il nome: max 30 caratteri, trimmed
+        const rawName  = (data && typeof data.name === "string" && data.name.trim())
             ? data.name.trim().slice(0, 30)
             : "";
         const lobbyName = rawName || "Lobby " + Math.floor(Math.random() * 9000 + 1000);
-        const password  = (data && typeof data.password === "string" && data.password.trim())
+
+        // Sanifica la password
+        const rawPassword  = (data && typeof data.password === "string" && data.password.trim())
             ? data.password.trim().slice(0, 30)
             : null;
-        const isPrivate = !!(data && data.private && password);
+        const isPrivateLobby = !!(data && data.private && rawPassword);
 
-        // Controlla limite massimo lobby
+        // Controlla limite di lobby attive
         if (Object.keys(lobbies).length >= MAX_LOBBIES) {
             socket.emit("lobbyError", "Server is full. Too many active lobbies, try again later.");
             return;
         }
 
-        // Nomi unici — controlla solo se il nome è stato specificato
+        // Nomi devono essere unici (solo se il nome è stato specificato)
         if (rawName) {
-            const exists = Object.values(lobbies).some(l => l.name.toLowerCase() === lobbyName.toLowerCase());
-            if (exists) { socket.emit("lobbyError", `A lobby named "${lobbyName}" already exists.`); return; }
+            const nameAlreadyTaken = Object.values(lobbies)
+                .some(l => l.name.toLowerCase() === lobbyName.toLowerCase());
+            if (nameAlreadyTaken) {
+                socket.emit("lobbyError", `A lobby named "${lobbyName}" already exists.`);
+                return;
+            }
         }
 
-        const lobbyId = crypto.randomBytes(4).toString("hex");
-        creaLobby(lobbyId, lobbyName, isPrivate ? password : null);
-        socket.emit("lobbyCreated", { lobbyId, lobbyName });
+        const newLobbyId = crypto.randomBytes(4).toString("hex");
+        createLobby(newLobbyId, lobbyName, isPrivateLobby ? rawPassword : null);
+        socket.emit("lobbyCreated", { lobbyId: newLobbyId, lobbyName });
     });
 
+    // ── joinLobby ─────────────────────────────────────────────
     socket.on("joinLobby", (data) => {
-        const lobbyId  = data && data.lobbyId;
+        const lobbyId = data && data.lobbyId;
         const password = data && data.password;
-        if (!lobbyId || !lobbies[lobbyId]) { socket.emit("lobbyError", "Lobby not found."); return; }
+
+        if (!lobbyId || !lobbies[lobbyId]) {
+            socket.emit("lobbyError", "Lobby not found.");
+            return;
+        }
+
         const lobby = lobbies[lobbyId];
-        if (Object.keys(lobby.players).length >= MAX_PLAYERS) { socket.emit("lobbyError", "Lobby full."); return; }
-        // Controlla password se lobby privata
-        if (lobby.private) {
+
+        if (Object.keys(lobby.players).length >= MAX_PLAYERS) {
+            socket.emit("lobbyError", "Lobby full.");
+            return;
+        }
+
+        // Verifica password per lobby private
+        if (lobby.isPrivate) {
             if (!password || password !== lobby.password) {
                 socket.emit("lobbyError", "Wrong password.");
                 return;
             }
         }
+
         socket.emit("lobbyJoinOk", { lobbyId, lobbyName: lobby.name });
     });
 });
 
-// ========================
-// GAME LOOP — 60fps fisica, 40fps broadcast
-// ========================
+// ============================================================
+// GAME LOOP — ~60 tick/secondo
+// Aggiorna: movimento, rigenerazione HP, proiettili, broadcast.
+// ============================================================
 setInterval(() => {
     const now = Date.now();
-    const doBroadcast = true;
 
     for (const lobbyId in lobbies) {
         const lobby = lobbies[lobbyId];
-        if (Object.keys(lobby.players).length === 0) continue;
+        if (Object.keys(lobby.players).length === 0) continue; // skip lobby vuote
 
-        const dt = Math.min((now - lobby.lastTime) / 1000, 0.05);
-        lobby.lastTime = now;
+        // Delta time in secondi (clamped a 50ms per evitare "salti" dopo lag)
+        const deltaTime = Math.min((now - lobby.lastTickTime) / 1000, 0.05);
+        lobby.lastTickTime = now;
 
-        for (const id in lobby.players) { lobby.players[id].hitFlash = false; }
-
-        // Movimento
+        // Reset del flag hitFlash ad ogni tick (lampeggio dura 1 frame)
         for (const id in lobby.players) {
-            const p = lobby.players[id];
-            if (p.morto) continue;
-            const len = Math.hypot(p.dir.x, p.dir.y);
-            if (len > 0) {
-                p.pos.x += (p.dir.x / len) * SPEED * dt;
-                p.pos.y += (p.dir.y / len) * SPEED * dt;
-            }
-            risolviCollisioni(p, lobby.ostacoliSolidi);
+            lobby.players[id].hitFlash = false;
         }
 
-        // Regen vita
+        // ── Movimento giocatori ───────────────────────────────────
         for (const id in lobby.players) {
-            const p = lobby.players[id];
-            if (p.morto || p.hp >= PLAYER_MAX_HP) continue;
-            if (now - p.lastHit >= 4000) p.hp = Math.min(PLAYER_MAX_HP, p.hp + 8 * dt);
+            const player = lobby.players[id];
+            if (player.isDead) continue;
+
+            const dirLength = Math.hypot(player.dir.x, player.dir.y);
+            if (dirLength > 0) {
+                // Normalizza la direzione per velocità costante in diagonale
+                player.pos.x += (player.dir.x / dirLength) * PLAYER_SPEED * deltaTime;
+                player.pos.y += (player.dir.y / dirLength) * PLAYER_SPEED * deltaTime;
+            }
+            resolvePlayerCollisions(player, lobby.solidObstacles);
         }
 
-        // Proiettili
-        for (let i = lobby.proiettili.length - 1; i >= 0; i--) {
-            const b = lobby.proiettili[i];
-            b.pos.x += b.dir.x * SPEED_PROIETTILE * dt;
-            b.pos.y += b.dir.y * SPEED_PROIETTILE * dt;
-
-            if ((now - b.spawnTime) / 1000 >= BULLET_LIFETIME) { lobby.proiettili.splice(i, 1); continue; }
-
-            let hitWall = false;
-            for (const o of lobby.ostacoliSolidi) {
-                if (Math.hypot(b.pos.x - o.x, b.pos.y - o.y) < o.rCollisione + 4) { hitWall = true; break; }
+        // ── Rigenerazione HP ──────────────────────────────────────
+        // Inizia a rigenerare 4 secondi dopo l'ultimo colpo subito.
+        for (const id in lobby.players) {
+            const player = lobby.players[id];
+            if (player.isDead || player.hp >= PLAYER_MAX_HP) continue;
+            if (now - player.lastHitTime >= 4000) {
+                player.hp = Math.min(PLAYER_MAX_HP, player.hp + 8 * deltaTime);
             }
-            if (hitWall) { lobby.proiettili.splice(i, 1); continue; }
+        }
 
-            let hit = false;
-            for (const id in lobby.players) {
-                if (id === b.owner) continue;
-                const p = lobby.players[id];
-                if (p.morto) continue;
-                if (Math.hypot(b.pos.x - p.pos.x, b.pos.y - p.pos.y) < PLAYER_RADIUS + 6) {
-                    p.hp -= DAMAGE_BY_WEAPON[b.weapon] ?? 20;
-                    p.hitFlash = true; p.lastHit = now; hit = true;
-                    if (p.hp <= 0) {
-                        p.hp = 0; p.morto = true; p.dir = { x: 0, y: 0 };
-                        if (lobby.leaderboard[id])      lobby.leaderboard[id].deaths++;
-                        if (lobby.leaderboard[b.owner]) lobby.leaderboard[b.owner].kills++;
-                        lobby.nsp.to(b.owner).emit("killConfirm", { victim: p.nickname });
-                    }
+        // ── Aggiornamento proiettili ──────────────────────────────
+        // Itera al contrario per poter rimuovere elementi in sicurezza
+        for (let i = lobby.bullets.length - 1; i >= 0; i--) {
+            const bullet = lobby.bullets[i];
+
+            // Muovi il proiettile
+            bullet.pos.x += bullet.dir.x * BULLET_SPEED * deltaTime;
+            bullet.pos.y += bullet.dir.y * BULLET_SPEED * deltaTime;
+
+            // Rimuovi se supera il tempo di vita
+            const bulletAgeSeconds = (now - bullet.spawnTime) / 1000;
+            if (bulletAgeSeconds >= BULLET_LIFETIME_SEC) {
+                lobby.bullets.splice(i, 1);
+                continue;
+            }
+
+            // Rimuovi se colpisce un ostacolo solido
+            let hitObstacle = false;
+            for (const obstacle of lobby.solidObstacles) {
+                if (Math.hypot(bullet.pos.x - obstacle.x, bullet.pos.y - obstacle.y) < obstacle.rCollisione + 4) {
+                    hitObstacle = true;
                     break;
                 }
             }
-            if (hit) lobby.proiettili.splice(i, 1);
-        }
-
-        // Broadcast
-        if (doBroadcast) {
-            const playersState = {};
-            for (const id in lobby.players) {
-                const p = lobby.players[id];
-                playersState[id] = {
-                    pos: { x: Math.round(p.pos.x), y: Math.round(p.pos.y) },
-                    hp: p.hp, morto: p.morto, nickname: p.nickname,
-                    angle: p.angle, weapon: p.weapon,
-                    hitFlash: p.hitFlash || undefined,
-                    punchCount: p.punchCount || 0,
-                    punchHand: p.punchHand || 0,
-                    ammo: p.ammo || { gun: MAX_AMMO.gun, pistol: MAX_AMMO.pistol },
-                };
+            if (hitObstacle) {
+                lobby.bullets.splice(i, 1);
+                continue;
             }
-            lobby.nsp.emit("state", {
-                players: playersState,
-                proiettili: lobby.proiettili,
-                lb: getLeaderboard(lobby),
-                playerCount: Object.keys(lobby.players).length,
-                maxPlayers: MAX_PLAYERS,
-            });
-        }
-    }
-}, 1000 / 60);
 
-server.listen(process.env.PORT || 4000, () => {
-    console.log("Server avviato sulla porta", process.env.PORT || 4000);
+            // Controlla collisione con giocatori
+            let hitPlayer = false;
+            for (const targetId in lobby.players) {
+                if (targetId === bullet.ownerId) continue; // non colpire il proprietario
+                const target = lobby.players[targetId];
+                if (target.isDead) continue;
+
+                const distToPlayer = Math.hypot(bullet.pos.x - target.pos.x, bullet.pos.y - target.pos.y);
+                if (distToPlayer < PLAYER_RADIUS + 6) {
+                    // Colpito!
+                    target.hp         -= DAMAGE_BY_WEAPON[bullet.weapon] ?? 20;
+                    target.hitFlash    = true;
+                    target.lastHitTime = now;
+                    hitPlayer = true;
+
+                    if (target.hp <= 0) {
+                        target.hp     = 0;
+                        target.isDead = true;
+                        target.dir    = { x: 0, y: 0 };
+                        if (lobby.leaderboard[targetId])    lobby.leaderboard[targetId].deaths++;
+                        if (lobby.leaderboard[bullet.ownerId]) lobby.leaderboard[bullet.ownerId].kills++;
+                        lobby.namespace.to(bullet.ownerId).emit("killConfirm", { victim: target.nickname });
+                    }
+                    break; // un proiettile colpisce al massimo un giocatore
+                }
+            }
+            if (hitPlayer) {
+                lobby.bullets.splice(i, 1);
+            }
+        }
+
+        // ── Broadcast dello stato a tutti i client della lobby ────
+        const playersStateSnapshot = {};
+        for (const id in lobby.players) {
+            const player = lobby.players[id];
+            playersStateSnapshot[id] = {
+                pos:        { x: Math.round(player.pos.x), y: Math.round(player.pos.y) },
+                hp:         player.hp,
+                morto:      player.isDead,       // "morto" mantenuto per compatibilità client
+                nickname:   player.nickname,
+                angle:      player.angle,
+                weapon:     player.weapon,
+                hitFlash:   player.hitFlash || undefined,
+                punchCount: player.punchCount || 0,
+                punchHand:  player.punchHand  || 0,
+                ammo:       player.ammo || { gun: MAX_AMMO.gun, pistol: MAX_AMMO.pistol },
+            };
+        }
+
+        lobby.namespace.emit("state", {
+            players:     playersStateSnapshot,
+            proiettili:  lobby.bullets,          // "proiettili" mantenuto per compatibilità client
+            lb:          getLeaderboard(lobby),
+            playerCount: Object.keys(lobby.players).length,
+            maxPlayers:  MAX_PLAYERS,
+        });
+    }
+}, 1000 / 60); // ~60 tick al secondo
+
+// ============================================================
+// AVVIO SERVER
+// ============================================================
+const PORT = process.env.PORT || 4000;
+server.listen(PORT, () => {
+    console.log("Server avviato sulla porta", PORT);
 });
