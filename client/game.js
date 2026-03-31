@@ -192,6 +192,13 @@ const AUTO_FIRE_INTERVAL_MS     = 100;
 /** Contatore pugni locali (per alternare mano destra/sinistra nell'animazione) */
 let localPunchCount = 0;
 
+/**
+ * Timestamp dell'ultima animazione pugno eseguita.
+ * Usato per garantire che l'animazione non parta più di una volta
+ * ogni 200ms, in sincronia con il cooldown hitbox del server.
+ */
+let lastPunchTime = 0;
+
 /** Timestamp dell'ultimo sparo con pistola */
 let lastPistolShotTime   = 0;
 /** Timestamp dell'ultimo sparo automatico (fucile/fists) */
@@ -243,9 +250,15 @@ export function shoot() {
         playShootSound();
     } else {
         playFistsSound();
-        localPunchCount++;
-        // Mano destra se dispari, sinistra se pari
-        triggerPunch(state.myId, localPunchCount % 2 === 1 ? 1 : 0);
+        // Anima il pugno solo se il cooldown da 200ms è scaduto,
+        // così ogni animazione corrisponde esattamente a un'hitbox reale.
+        const nowPunch = performance.now();
+        if (nowPunch - lastPunchTime >= 200) {
+            lastPunchTime = nowPunch;
+            localPunchCount++;
+            // Mano destra se dispari, sinistra se pari
+            triggerPunch(state.myId, localPunchCount % 2 === 1 ? 1 : 0);
+        }
     }
 }
 
@@ -273,8 +286,13 @@ function shootWithTouchJoystick() {
         playShootSound();
     } else {
         playFistsSound();
-        localPunchCount++;
-        triggerPunch(state.myId, localPunchCount % 2 === 1 ? 1 : 0);
+        // Stesso controllo del mouse: anima solo ogni 200ms
+        const nowPunch = performance.now();
+        if (nowPunch - lastPunchTime >= 200) {
+            lastPunchTime = nowPunch;
+            localPunchCount++;
+            triggerPunch(state.myId, localPunchCount % 2 === 1 ? 1 : 0);
+        }
     }
 }
 
