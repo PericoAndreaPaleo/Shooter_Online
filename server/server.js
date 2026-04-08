@@ -16,6 +16,15 @@ const http    = require("http");
 const { Server } = require("socket.io");
 const crypto  = require("crypto");
 
+// ── AGGIUNTA: pacchetti per database e autenticazione ────────
+// mysql2/promise  → driver MySQL con supporto async/await
+// bcryptjs        → hashing sicuro delle password
+// cookie-parser   → legge i cookie httpOnly dalla richiesta
+const mysql        = require("mysql2/promise");
+const bcrypt       = require("bcryptjs");
+const cookieParser = require("cookie-parser");
+// ─────────────────────────────────────────────────────────────
+
 const app    = express();
 const server = http.createServer(app);
 
@@ -24,6 +33,13 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 // Serve la cartella "client" come root statica
 app.use(express.static("client"));
+
+// ── AGGIUNTA: middleware per leggere JSON nel body e i cookie ─
+// express.json()   → necessario per /api/register e /api/login
+// cookieParser()   → necessario per leggere session_token dai cookie
+app.use(express.json());
+app.use(cookieParser());
+// ─────────────────────────────────────────────────────────────
 
 // ============================================================
 // KEEP-ALIVE PER RENDER.COM
@@ -36,6 +52,31 @@ if (RENDER_URL) {
         fetch(RENDER_URL).catch(() => {}); // ignoriamo eventuali errori di rete
     }, 10 * 60 * 1000); // ogni 10 minuti
 }
+
+// ============================================================
+// AGGIUNTA: CONNESSIONE AL DATABASE MySQL (Clever Cloud)
+//
+// Usa un pool di connessioni (max 5, limite del piano DEV).
+// Le credenziali vengono lette dalle variabili d'ambiente di
+// Render — non vanno mai scritte direttamente nel codice.
+// ssl: rejectUnauthorized: false → richiesto da Clever Cloud.
+// ============================================================
+const db = mysql.createPool({
+    host:     process.env.MYSQL_HOST,
+    port:     process.env.MYSQL_PORT || 3306,
+    database: process.env.MYSQL_DB,
+    user:     process.env.MYSQL_USER,
+    password: process.env.MYSQL_PASSWORD,
+    waitForConnections: true,
+    connectionLimit:    5,                      // piano DEV Clever Cloud: max 5 connessioni
+    ssl: { rejectUnauthorized: false },         // richiesto da Clever Cloud
+});
+
+// Test connessione all'avvio del server: stampa OK o l'errore nei log di Render
+db.getConnection()
+    .then(conn => { console.log("Database MySQL connesso!"); conn.release(); })
+    .catch(err  => { console.error("Errore connessione database:", err.message); });
+// ─────────────────────────────────────────────────────────────
 
 // ============================================================
 // COSTANTI DI GIOCO
@@ -105,6 +146,12 @@ const MAX_LOBBIES = 20;
  * mantenendo nickname e statistiche.
  */
 const REJOIN_TOKEN_TTL = 5 * 60 * 1000; // 5 minuti
+
+// ── AGGIUNTA: durata del cookie di sessione (7 giorni in ms) ─
+// Usata sia per impostare il cookie lato Node.js sia per la
+// scadenza del token nella tabella "sessioni" del database.
+const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 giorni
+// ─────────────────────────────────────────────────────────────
 
 // ============================================================
 // GENERAZIONE NICKNAME CASUALI
@@ -291,6 +338,186 @@ function getLeaderboard(lobby) {
         .sort((a, b) => b.kills - a.kills)
         .slice(0, 10);
 }
+
+// ============================================================
+// AGGIUNTA: ROUTE HTTP — AUTENTICAZIONE
+//
+// Tutte le route /api/* sono gestite da Express (non da Socket.IO).
+// Il browser le chiama con fetch() dalla pagina di gioco.
+// I cookie httpOnly vengono impostati/letti automaticamente.
+// ============================================================
+
+// ── /api/register — crea un nuovo account ───────────────────
+// Riceve { username, email, password } nel body JSON.
+// Controlla duplicati, hash della password con bcrypt,
+// inserisce utente + riga statistiche nel database.
+app.post("/api/register", async (req, res) => {
+    const { username, email, password } = req.body;
+
+    // Validazione base dei campi
+    if (!username || !email || !password) {
+        return res.status(400).json({ error: "Campi mancanti." });
+    }
+    if (username.length < 3 || username.length > 30) {
+        return res.status(400).json({ error: "Username deve essere tra 3 e 30 caratteri." });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: "Email non valida." });
+    }
+    if (password.length < 6) {
+        return res.status(400).json({ error: "Password troppo corta (minimo 6 caratteri)." });
+    }
+
+    try {
+        // Controlla se username o email esistono già nel database
+        const [existing] = await db.execute(
+            "SELECT id FROM utenti WHERE username = ? OR email = ?",
+            [username, email]
+        );
+        if (existing.length > 0) {
+            return res.status(409).json({ error: "Username o email già in uso." });
+        }
+
+        // Hash della password con bcrypt (cost factor 10 = buon equilibrio sicurezza/velocità)
+        const hash = await bcrypt.hash(password, 10);
+
+        // Inserisce il nuovo utente nella tabella utenti
+        const [result] = await db.execute(
+            "INSERT INTO utenti (username, email, password_hash) VALUES (?, ?, ?)",
+            [username, email, hash]
+        );
+        const newId = result.insertId;
+
+        // Crea la riga statistiche vuota collegata al nuovo utente
+        await db.execute(
+            "INSERT INTO statistiche_giocatore (utente_id) VALUES (?)",
+            [newId]
+        );
+
+        res.json({ ok: true, userId: newId });
+
+    } catch (err) {
+        console.error("Errore registrazione:", err.message);
+        res.status(500).json({ error: "Errore server." });
+    }
+});
+
+// ── /api/login — accede con username e password ──────────────
+// Riceve { username, password } nel body JSON.
+// Verifica la password con bcrypt, genera un token di sessione,
+// lo salva nel DB e lo manda al browser come cookie httpOnly.
+app.post("/api/login", async (req, res) => {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+        return res.status(400).json({ error: "Campi mancanti." });
+    }
+
+    try {
+        // Cerca l'utente nel database per username
+        const [rows] = await db.execute(
+            "SELECT id, password_hash FROM utenti WHERE username = ?",
+            [username]
+        );
+
+        if (rows.length === 0) {
+            return res.status(401).json({ error: "Credenziali errate." });
+        }
+
+        const user = rows[0];
+
+        // Confronta la password fornita con l'hash salvato (sicuro contro timing attacks)
+        const passwordOk = await bcrypt.compare(password, user.password_hash);
+        if (!passwordOk) {
+            return res.status(401).json({ error: "Credenziali errate." });
+        }
+
+        // Genera token di sessione sicuro (64 caratteri hex)
+        const token   = crypto.randomBytes(32).toString("hex");
+        const scadeIl = new Date(Date.now() + COOKIE_MAX_AGE);
+
+        // Salva il token nella tabella sessioni con la data di scadenza
+        await db.execute(
+            "INSERT INTO sessioni (token, utente_id, scade_il) VALUES (?, ?, ?)",
+            [token, user.id, scadeIl]
+        );
+
+        // Aggiorna la data dell'ultimo accesso
+        await db.execute(
+            "UPDATE utenti SET ultimo_accesso = NOW() WHERE id = ?",
+            [user.id]
+        );
+
+        // Carica le statistiche del giocatore da mandare al client
+        const [stats] = await db.execute(
+            "SELECT * FROM statistiche_giocatore WHERE utente_id = ?",
+            [user.id]
+        );
+
+        // Imposta il cookie httpOnly — invisibile al JavaScript del browser,
+        // quindi non rubabile da XSS. Viene inviato automaticamente ad ogni richiesta.
+        res.cookie("session_token", token, {
+            httpOnly: true,     // non accessibile da JS nel browser
+            secure:   true,     // solo HTTPS (funziona su Render)
+            sameSite: "Strict",
+            maxAge:   COOKIE_MAX_AGE,
+        });
+
+        res.json({
+            ok:      true,
+            userId:  user.id,
+            username,
+            livello: stats[0]?.livello || 1,
+            xp:      stats[0]?.xp || 0,
+        });
+
+    } catch (err) {
+        console.error("Errore login:", err.message);
+        res.status(500).json({ error: "Errore server." });
+    }
+});
+
+// ── /api/logout — invalida la sessione corrente ──────────────
+// Cancella il token dal database e rimuove il cookie dal browser.
+app.post("/api/logout", async (req, res) => {
+    const token = req.cookies.session_token;
+    if (token) {
+        // Cancella il token dal DB (ignora errori se non esiste già)
+        await db.execute("DELETE FROM sessioni WHERE token = ?", [token]).catch(() => {});
+    }
+    res.clearCookie("session_token");
+    res.json({ ok: true });
+});
+
+// ── /api/me — verifica la sessione e restituisce i dati utente
+// Chiamata dal client all'avvio per sapere se l'utente è già loggato.
+// Legge il cookie session_token e controlla che non sia scaduto.
+app.get("/api/me", async (req, res) => {
+    const token = req.cookies.session_token;
+    if (!token) return res.status(401).json({ error: "Non autenticato." });
+
+    try {
+        // JOIN tra sessioni, utenti e statistiche in una sola query
+        const [rows] = await db.execute(`
+            SELECT s.utente_id, u.username, g.livello, g.xp, g.kills_totali, g.morti_totali, g.partite
+            FROM sessioni s
+            JOIN utenti u ON u.id = s.utente_id
+            JOIN statistiche_giocatore g ON g.utente_id = s.utente_id
+            WHERE s.token = ? AND s.scade_il > NOW()
+        `, [token]);
+
+        if (rows.length === 0) {
+            return res.status(401).json({ error: "Sessione scaduta o non valida." });
+        }
+
+        res.json({ ok: true, user: rows[0] });
+
+    } catch (err) {
+        console.error("Errore check sessione:", err.message);
+        res.status(500).json({ error: "Errore server." });
+    }
+});
+// ─────────────────────────────────────────────────────────────
 
 // ============================================================
 // GESTIONE LOBBIES
