@@ -65,6 +65,11 @@ export const state = {
     reloadStartTime: 0,     // timestamp ms dell'inizio ricarica
     reloadDuration:  0,     // durata totale ricarica in ms
 
+    // dati account utente loggato (null se ospite)
+    accountUsername: null,
+    accountLivello:  1,
+    accountXp:       0,
+
     // ── Joystick touch (mobile) ─────────────────────────────────
     aimJoyAngle:  0,                    // angolo di mira dal joystick destro
     aimJoyActive: false,                // true se il joystick destro è attivo

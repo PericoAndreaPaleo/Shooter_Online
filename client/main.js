@@ -89,6 +89,13 @@ import {
 } from "./game.js";
 import { playKillSound } from "./audio.js";
 
+// ── AGGIUNTA: import modulo autenticazione ───────────────────
+// checkSession  → verifica se l'utente ha già un cookie valido
+// initAuth      → registra il callback da chiamare dopo il login
+// mostraSchermataAuth → mostra la schermata login/registrazione
+import { checkSession, initAuth, mostraSchermataAuth } from "./auth.js";
+// ─────────────────────────────────────────────────────────────
+
 // ============================================================
 // ZOOM CAMERA
 // ============================================================
@@ -347,12 +354,35 @@ registraOnUpdate();
 window.addEventListener("resize", aggiornaBlackBars);
 
 // ============================================================
-// REJOIN AUTOMATICO ALL'AVVIO
-// Se in localStorage c'è un lobbyId + token salvati dalla
-// sessione precedente, il client tenta di riconnettersi
-// automaticamente alla stessa lobby.
+// AGGIUNTA: AVVIO CON CONTROLLO AUTENTICAZIONE
+//
+// Il flusso all'avvio è ora:
+//   1. checkSession() → chiede al server se c'è un cookie valido
+//   2a. Se loggato → salva i dati utente in state e avvia il gioco
+//   2b. Se non loggato → mostra la schermata login/registrazione
+//   3. Dopo login/registrazione → richiama avvioGioco()
+//
+// avvioGioco() contiene la logica di rejoin che prima stava
+// direttamente nel blocco IIFE in fondo al file originale.
 // ============================================================
-(function tryAutoRejoin() {
+
+/**
+ * Avvia il gioco dopo l'autenticazione (o come ospite).
+ * Contiene la logica di rejoin automatico originale.
+ *
+ * @param {Object|null} userData - Dati utente dal login, o null se ospite
+ */
+function avvioGioco(userData) {
+    // ── AGGIUNTA: salva i dati utente nello state se loggato ─────
+    // userData è null per gli ospiti, oppure { username, livello, xp, ... }
+    if (userData) {
+        state.accountUsername = userData.username;
+        state.accountLivello  = userData.livello  || 1;
+        state.accountXp       = userData.xp       || 0;
+    }
+    // ─────────────────────────────────────────────────────────────
+
+    // ── Rejoin automatico (logica originale invariata) ────────────
     const savedLobbyId   = localStorage.getItem("lobbyId");
     const savedLobbyName = localStorage.getItem("lobbyName");
     const savedToken     = localStorage.getItem("lobbyToken");
@@ -381,4 +411,24 @@ window.addEventListener("resize", aggiornaBlackBars);
             if (state.inLobbyScreen) mostraSchermataLobby();
         }, 150);
     }
+}
+
+// ── AGGIUNTA: punto di ingresso con autenticazione ───────────
+// Sostituisce il vecchio IIFE tryAutoRejoin() in fondo al file.
+// Prima controlla la sessione, poi mostra auth o avvia direttamente.
+(async function avvio() {
+    // Registra il callback che auth.js chiamerà dopo login/registrazione
+    initAuth(avvioGioco);
+
+    // Controlla se c'è già una sessione valida (cookie httpOnly)
+    const userData = await checkSession();
+
+    if (userData) {
+        // Sessione valida → avvia direttamente il gioco
+        avvioGioco(userData);
+    } else {
+        // Nessuna sessione → mostra login/registrazione
+        mostraSchermataAuth();
+    }
 })();
+// ─────────────────────────────────────────────────────────────
