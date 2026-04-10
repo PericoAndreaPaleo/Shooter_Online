@@ -1,29 +1,38 @@
 // ============================================================
-// auth.js — Gestione autenticazione lato client
+// auth.js — Gestione autenticazione lato client (via PHP)
 //
 // Questo modulo gestisce:
 //   • La schermata di login / registrazione mostrata prima del gioco
-//   • Le chiamate HTTP alle route /api/login e /api/register
-//   • Il controllo della sessione esistente (/api/me)
-//   • Il logout (/api/logout)
+//   • Le chiamate HTTP ai file PHP di autenticazione
+//   • Il controllo della sessione esistente (token in localStorage)
+//   • Il logout
+//
+// Il token di sessione viene salvato in localStorage dopo il login
+// e inviato nel body delle richieste POST ai PHP.
 //
 // Il flusso è:
 //   1. main.js chiama checkSession() all'avvio
-//   2. Se la sessione è valida → restituisce i dati utente
-//   3. Se non è valida → main.js chiama mostraSchermataAuth()
+//   2. Se il token in localStorage è valido → restituisce i dati utente
+//   3. Se non è valido → main.js chiama mostraSchermataAuth()
 //   4. Dopo login/registrazione riusciti → chiama onSuccess(userData)
 // ============================================================
 
 import { calcolaLetterbox } from "./state.js";
 
+// ============================================================
+// URL BASE DEI FILE PHP
+// Cambia questo valore con l'URL del tuo server PHP.
+// Esempio: "https://miosito.altervista.org/php"
+//          "https://miosito.com/shooter/php"
+// NON aggiungere lo slash finale.
+// ============================================================
+const PHP_BASE = "https://IL-TUO-SERVER-PHP.com/php";
+
 // ── Dipendenza iniettata da main.js ──────────────────────────
-// Chiamata dopo un login o registrazione riusciti,
-// con i dati utente { username, livello, xp, ... }
 let onAuthSuccess = null;
 
 /**
  * Registra la funzione da chiamare dopo autenticazione riuscita.
- * Deve essere chiamata da main.js prima di mostraSchermataAuth().
  * @param {function} callback
  */
 export function initAuth(callback) {
@@ -32,22 +41,31 @@ export function initAuth(callback) {
 
 // ============================================================
 // CHECK SESSIONE ESISTENTE
-// Chiamata da main.js all'avvio per sapere se l'utente
-// è già loggato (ha un cookie di sessione valido).
+// Legge il token da localStorage e lo verifica sul server PHP.
 // ============================================================
 
 /**
- * Controlla se esiste una sessione valida sul server.
+ * Controlla se esiste una sessione valida.
  * @returns {Promise<Object|null>} dati utente se loggato, null altrimenti
  */
 export async function checkSession() {
+    const token = localStorage.getItem("auth_token");
+    if (!token) return null;
+
     try {
-        const res = await fetch("/api/me");
+        const res = await fetch(`${PHP_BASE}/check_session.php`, {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ token }),
+        });
         if (res.ok) {
             const data = await res.json();
             if (data.ok) return data.user;
         }
     } catch (_) {}
+
+    // Token non valido o scaduto: pulisci localStorage
+    localStorage.removeItem("auth_token");
     return null;
 }
 
@@ -56,35 +74,35 @@ export async function checkSession() {
 // ============================================================
 
 /**
- * Esegue il logout: cancella la sessione sul server e il cookie.
- * @returns {Promise<void>}
+ * Esegue il logout: cancella il token sul server PHP e in localStorage.
  */
 export async function logout() {
-    await fetch("/api/logout", { method: "POST" }).catch(() => {});
+    const token = localStorage.getItem("auth_token");
+    if (token) {
+        await fetch(`${PHP_BASE}/logout.php`, {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ token }),
+        }).catch(() => {});
+    }
+    localStorage.removeItem("auth_token");
 }
 
 // ============================================================
 // SCHERMATA LOGIN / REGISTRAZIONE
-// Mostrata prima del gioco quando l'utente non è autenticato.
-// È un overlay HTML puro (niente Kaboom) che copre tutto lo schermo.
 // ============================================================
 
-/** Riferimento al container HTML della schermata auth (per rimuoverla) */
 let authContainer = null;
 
 /**
  * Mostra la schermata di login/registrazione.
- * Crea un overlay HTML sopra tutto il resto.
- *
- * @param {string} [errorMsg] - Messaggio di errore da mostrare subito (opzionale)
+ * @param {string} [errorMsg]
  */
 export function mostraSchermataAuth(errorMsg = "") {
-    // Rimuovi eventuale schermata precedente
     if (authContainer) { authContainer.remove(); authContainer = null; }
 
     const { scale } = calcolaLetterbox();
 
-    // ── Container principale ──────────────────────────────────
     authContainer = document.createElement("div");
     authContainer.style.cssText = `
         position:        fixed;
@@ -99,7 +117,6 @@ export function mostraSchermataAuth(errorMsg = "") {
         color:           white;
     `;
 
-    // ── Titolo ────────────────────────────────────────────────
     const title = document.createElement("div");
     title.textContent = "SHOOTER ONLINE";
     title.style.cssText = `
@@ -110,7 +127,6 @@ export function mostraSchermataAuth(errorMsg = "") {
         margin-bottom:  ${Math.round(8 * scale)}px;
     `;
 
-    // ── Sottotitolo ───────────────────────────────────────────
     const subtitle = document.createElement("div");
     subtitle.textContent = "Accedi per giocare";
     subtitle.style.cssText = `
@@ -120,7 +136,6 @@ export function mostraSchermataAuth(errorMsg = "") {
         letter-spacing: 1px;
     `;
 
-    // ── Card form ────────────────────────────────────────────
     const card = document.createElement("div");
     card.style.cssText = `
         background:    rgba(255,255,255,0.05);
@@ -133,7 +148,6 @@ export function mostraSchermataAuth(errorMsg = "") {
         gap:           ${Math.round(12 * scale)}px;
     `;
 
-    // ── Tab LOGIN / REGISTRATI ────────────────────────────────
     const tabRow = document.createElement("div");
     tabRow.style.cssText = `
         display:       flex;
@@ -141,12 +155,11 @@ export function mostraSchermataAuth(errorMsg = "") {
         margin-bottom: ${Math.round(4 * scale)}px;
     `;
 
-    let activeTab = "login"; // "login" | "register"
+    let activeTab = "login";
 
     const tabLogin = _creaTab("Accedi",     scale, true);
     const tabReg   = _creaTab("Registrati", scale, false);
 
-    // ── Campi del form ────────────────────────────────────────
     const fontSize    = `${Math.round(14 * scale)}px`;
     const inputHeight = `${Math.round(40 * scale)}px`;
     const inputStyle  = `
@@ -163,16 +176,14 @@ export function mostraSchermataAuth(errorMsg = "") {
         box-sizing:    border-box;
     `;
 
-    const inputUser  = _creaInput("text",     "Username",      inputStyle);
-    const inputEmail = _creaInput("email",    "Email",         inputStyle);
-    const inputPass  = _creaInput("password", "Password",      inputStyle);
+    const inputUser  = _creaInput("text",     "Username",       inputStyle);
+    const inputEmail = _creaInput("email",    "Email",          inputStyle);
+    const inputPass  = _creaInput("password", "Password",       inputStyle);
     const inputPass2 = _creaInput("password", "Ripeti password", inputStyle);
 
-    // L'email e la conferma password sono visibili solo in modalità registrazione
     inputEmail.style.display = "none";
     inputPass2.style.display = "none";
 
-    // ── Messaggio errore / successo ───────────────────────────
     const msgBox = document.createElement("div");
     msgBox.style.cssText = `
         font-size:   ${Math.round(13 * scale)}px;
@@ -182,7 +193,6 @@ export function mostraSchermataAuth(errorMsg = "") {
     `;
     if (errorMsg) msgBox.textContent = errorMsg;
 
-    // ── Pulsante principale ───────────────────────────────────
     const btnAzione = document.createElement("button");
     btnAzione.textContent = "ACCEDI";
     btnAzione.style.cssText = `
@@ -199,8 +209,6 @@ export function mostraSchermataAuth(errorMsg = "") {
         margin-top:      ${Math.round(4 * scale)}px;
     `;
 
-    // ── Pulsante ospite ───────────────────────────────────────
-    // Permette di giocare senza account (senza salvare statistiche)
     const btnOspite = document.createElement("button");
     btnOspite.textContent = "Gioca come ospite";
     btnOspite.style.cssText = `
@@ -214,10 +222,8 @@ export function mostraSchermataAuth(errorMsg = "") {
         cursor:          pointer;
     `;
 
-    // ── Logica switch tab ─────────────────────────────────────
     function switchTab(tab) {
         activeTab = tab;
-
         if (tab === "login") {
             tabLogin.style.background  = "rgba(0,255,100,0.15)";
             tabLogin.style.color       = "rgb(0,255,100)";
@@ -245,21 +251,18 @@ export function mostraSchermataAuth(errorMsg = "") {
     tabLogin.addEventListener("click", () => switchTab("login"));
     tabReg.addEventListener("click",   () => switchTab("register"));
 
-    // ── Handler pulsante principale ───────────────────────────
     btnAzione.addEventListener("click", () => eseguiAzione());
 
-    // Permette di premere Invio nei campi per confermare
     [inputUser, inputEmail, inputPass, inputPass2].forEach(el => {
         el.addEventListener("keydown", e => { if (e.key === "Enter") eseguiAzione(); });
     });
 
-    // ── Handler ospite ────────────────────────────────────────
     btnOspite.addEventListener("click", () => {
         rimuoviSchermataAuth();
-        if (onAuthSuccess) onAuthSuccess(null); // null = ospite, senza dati utente
+        if (onAuthSuccess) onAuthSuccess(null);
     });
 
-    // ── Funzione esegui azione (login o registrazione) ────────
+    // ── Login o Registrazione ─────────────────────────────────
     async function eseguiAzione() {
         const username  = inputUser.value.trim();
         const email     = inputEmail.value.trim();
@@ -270,7 +273,6 @@ export function mostraSchermataAuth(errorMsg = "") {
         msgBox.textContent = "";
 
         if (activeTab === "login") {
-            // ── Login ──────────────────────────────────────────
             if (!username || !password) {
                 msgBox.textContent = "Inserisci username e password."; return;
             }
@@ -278,7 +280,7 @@ export function mostraSchermataAuth(errorMsg = "") {
             btnAzione.disabled    = true;
 
             try {
-                const res  = await fetch("/api/login", {
+                const res  = await fetch(`${PHP_BASE}/login.php`, {
                     method:  "POST",
                     headers: { "Content-Type": "application/json" },
                     body:    JSON.stringify({ username, password }),
@@ -286,7 +288,8 @@ export function mostraSchermataAuth(errorMsg = "") {
                 const data = await res.json();
 
                 if (data.ok) {
-                    // Login riuscito: chiudi la schermata e avvia il gioco
+                    // Salva il token in localStorage
+                    localStorage.setItem("auth_token", data.token);
                     rimuoviSchermataAuth();
                     if (onAuthSuccess) onAuthSuccess(data);
                 } else {
@@ -312,7 +315,7 @@ export function mostraSchermataAuth(errorMsg = "") {
             btnAzione.disabled    = true;
 
             try {
-                const res  = await fetch("/api/register", {
+                const res  = await fetch(`${PHP_BASE}/register.php`, {
                     method:  "POST",
                     headers: { "Content-Type": "application/json" },
                     body:    JSON.stringify({ username, email, password }),
@@ -320,8 +323,8 @@ export function mostraSchermataAuth(errorMsg = "") {
                 const data = await res.json();
 
                 if (data.ok) {
-                    // Registrazione riuscita: esegui subito il login automatico
-                    const resLogin  = await fetch("/api/login", {
+                    // Registrazione ok → login automatico
+                    const resLogin  = await fetch(`${PHP_BASE}/login.php`, {
                         method:  "POST",
                         headers: { "Content-Type": "application/json" },
                         body:    JSON.stringify({ username, password }),
@@ -329,10 +332,10 @@ export function mostraSchermataAuth(errorMsg = "") {
                     const dataLogin = await resLogin.json();
 
                     if (dataLogin.ok) {
+                        localStorage.setItem("auth_token", dataLogin.token);
                         rimuoviSchermataAuth();
                         if (onAuthSuccess) onAuthSuccess(dataLogin);
                     } else {
-                        // Registrazione ok ma login fallito: passa al tab login
                         msgBox.style.color = "rgb(0, 220, 100)";
                         msgBox.textContent = "Account creato! Ora accedi.";
                         switchTab("login");
@@ -351,7 +354,6 @@ export function mostraSchermataAuth(errorMsg = "") {
         }
     }
 
-    // ── Assemblaggio DOM ──────────────────────────────────────
     tabRow.appendChild(tabLogin);
     tabRow.appendChild(tabReg);
     card.appendChild(tabRow);
@@ -368,7 +370,6 @@ export function mostraSchermataAuth(errorMsg = "") {
     authContainer.appendChild(card);
     document.body.appendChild(authContainer);
 
-    // Focus automatico sul campo username
     setTimeout(() => inputUser.focus(), 50);
 }
 
@@ -382,17 +383,8 @@ export function rimuoviSchermataAuth() {
     }
 }
 
-// ============================================================
-// HELPER PRIVATI
-// ============================================================
+// ── Helper privati ────────────────────────────────────────────
 
-/**
- * Crea un elemento tab stilizzato.
- * @param {string}  label   - Testo del tab
- * @param {number}  scale   - Scala letterbox
- * @param {boolean} active  - Se true, lo stile è "selezionato"
- * @returns {HTMLButtonElement}
- */
 function _creaTab(label, scale, active) {
     const btn = document.createElement("button");
     btn.textContent = label;
@@ -410,19 +402,11 @@ function _creaTab(label, scale, active) {
     return btn;
 }
 
-/**
- * Crea un campo input stilizzato.
- * @param {string} type        - "text" | "email" | "password"
- * @param {string} placeholder - Testo placeholder
- * @param {string} cssText     - Stile CSS da applicare
- * @returns {HTMLInputElement}
- */
 function _creaInput(type, placeholder, cssText) {
     const input       = document.createElement("input");
     input.type        = type;
     input.placeholder = placeholder;
     input.style.cssText = cssText;
-    // Rimuove l'autocomplete del browser nei campi password
     if (type === "password") input.autocomplete = "current-password";
     return input;
 }

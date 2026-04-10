@@ -13,6 +13,11 @@
 
 require_once 'db.php';
 
+// Permette chiamate cross-origin dal dominio di Render
+header('Access-Control-Allow-Origin: https://shooter-online.onrender.com');
+header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type');
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 header('Content-Type: application/json');
 
 // Legge il body JSON

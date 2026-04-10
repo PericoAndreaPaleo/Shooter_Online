@@ -1,28 +1,34 @@
 <?php
 // ============================================================
-// db.php — Connessione al database MySQL
+// db.php — Connessione al database MySQL (Clever Cloud)
 //
-// Questo file viene incluso da tutti gli altri script PHP
-// tramite require_once. Restituisce una connessione PDO
-// al database MySQL di Clever Cloud.
+// Le credenziali vengono lette dalle variabili d'ambiente del
+// server PHP, NON scritte nel codice sorgente.
 //
-// Le credenziali sono quelle del tuo addon Shooter_Online
-// su Clever Cloud. Cambiale se le rigeneri.
+// Sul tuo server PHP imposta queste variabili d'ambiente:
+//   MYSQL_HOST      = bfeokmrnutfoddieljtb-mysql.services.clever-cloud.com
+//   MYSQL_PORT      = 3306
+//   MYSQL_DB        = bfeokmrnutfoddieljtb
+//   MYSQL_USER      = ugohnvtx6lb7cun6
+//   MYSQL_PASSWORD  = (la tua password — CAMBIALA su Clever Cloud!)
+//
+// Su Apache/cPanel puoi usare SetEnv nel .htaccess:
+//   SetEnv MYSQL_HOST "..."
+//   SetEnv MYSQL_PASSWORD "..."
 // ============================================================
 
 function getDB(): PDO {
-    $host     = "bfeokmrnutfoddieljtb-mysql.services.clever-cloud.com";
-    $port     = 3306;
-    $dbname   = "bfeokmrnutfoddieljtb";
-    $user     = "ugohnvtx6lb7cun6";
-    $password = "IJv0Vr9pDt2LcfK3aW9K";
+    $host     = getenv('MYSQL_HOST')     ?: 'localhost';
+    $port     = getenv('MYSQL_PORT')     ?: 3306;
+    $dbname   = getenv('MYSQL_DB')       ?: '';
+    $user     = getenv('MYSQL_USER')     ?: '';
+    $password = getenv('MYSQL_PASSWORD') ?: '';
 
     $dsn = "mysql:host=$host;port=$port;dbname=$dbname;charset=utf8mb4";
 
     $pdo = new PDO($dsn, $user, $password, [
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        // SSL richiesto da Clever Cloud
         PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => false,
     ]);
 
