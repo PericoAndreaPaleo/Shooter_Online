@@ -90,8 +90,8 @@ import {
 import { playKillSound } from "./audio.js";
 
 // ── AGGIUNTA: import modulo autenticazione ───────────────────
-// checkSession  → verifica se l'utente ha già un cookie valido
-// initAuth      → registra il callback da chiamare dopo il login
+// checkSession        → verifica se l'utente ha già un cookie valido
+// initAuth            → registra il callback da chiamare dopo il login
 // mostraSchermataAuth → mostra la schermata login/registrazione
 import { checkSession, initAuth, mostraSchermataAuth } from "./auth.js";
 // ─────────────────────────────────────────────────────────────
@@ -161,8 +161,8 @@ state.mainSocket = io();
  * Connette il client al namespace Socket.IO della lobby scelta
  * e registra tutti gli handler degli eventi di gameplay.
  *
- * @param {string}      lobbyId   - ID della lobby (8 char hex)
- * @param {string}      lobbyName - Nome visualizzato della lobby
+ * @param {string}      lobbyId    - ID della lobby (8 char hex)
+ * @param {string}      lobbyName  - Nome visualizzato della lobby
  * @param {string|null} savedToken - Token di rejoin (se disponibile)
  */
 function connectToLobbyNamespace(lobbyId, lobbyName, savedToken) {
@@ -200,14 +200,14 @@ function connectToLobbyNamespace(lobbyId, lobbyName, savedToken) {
         } = initData;
 
         // Aggiorna lo stato locale
-        state.myId        = id;
-        state.myToken     = token;
-        state.myLobbyId   = receivedLobbyId;
-        state.myLobbyName = receivedLobbyName;
-        state.myNickname  = nickname;
-        state.mapSize     = mapSize;
+        state.myId          = id;
+        state.myToken       = token;
+        state.myLobbyId     = receivedLobbyId;
+        state.myLobbyName   = receivedLobbyName;
+        state.myNickname    = nickname;
+        state.mapSize       = mapSize;
         state.inLobbyScreen = false;
-        state.ostacoli    = ostacoli;
+        state.ostacoli      = ostacoli;
 
         // Aggiorna i dati di sessione persistenti
         localStorage.setItem("lobbyToken", token);
@@ -361,15 +361,11 @@ window.addEventListener("resize", aggiornaBlackBars);
 //   2a. Se loggato → salva i dati utente in state e avvia il gioco
 //   2b. Se non loggato → mostra la schermata login/registrazione
 //   3. Dopo login/registrazione → richiama avvioGioco()
-//
-// avvioGioco() contiene la logica di rejoin che prima stava
-// direttamente nel blocco IIFE in fondo al file originale.
 // ============================================================
 
 /**
  * Avvia il gioco dopo l'autenticazione (o come ospite).
  * Contiene la logica di rejoin automatico originale.
- *
  * @param {Object|null} userData - Dati utente dal login, o null se ospite
  */
 function avvioGioco(userData) {
@@ -414,12 +410,12 @@ function avvioGioco(userData) {
 }
 
 // ── AGGIUNTA: punto di ingresso con autenticazione ───────────
-// Sostituisce il vecchio IIFE tryAutoRejoin() in fondo al file.
-// Prima controlla la sessione, poi mostra auth o avvia direttamente.
-(async function avvio() {
-    // Registra il callback che auth.js chiamerà dopo login/registrazione
-    initAuth(avvioGioco);
+// initAuth viene chiamata QUI, fuori dalla funzione async,
+// così il callback è già registrato quando l'utente preme
+// "Gioca come ospite" o completa il login.
+initAuth(avvioGioco);
 
+(async function avvio() {
     // Controlla se c'è già una sessione valida (cookie httpOnly)
     const userData = await checkSession();
 
