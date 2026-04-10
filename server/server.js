@@ -494,7 +494,7 @@ app.post("/api/logout", async (req, res) => {
 // Legge il cookie session_token e controlla che non sia scaduto.
 app.get("/api/me", async (req, res) => {
     const token = req.cookies.session_token;
-    if (!token) return res.status(401).json({ error: "Non autenticato." });
+    if (!token) return res.status(200).json({ ok: false, error: "Non autenticato." });
 
     try {
         // JOIN tra sessioni, utenti e statistiche in una sola query
@@ -507,7 +507,7 @@ app.get("/api/me", async (req, res) => {
         `, [token]);
 
         if (rows.length === 0) {
-            return res.status(401).json({ error: "Sessione scaduta o non valida." });
+            return res.status(200).json({ ok: false, error: "Sessione scaduta o non valida." });
         }
 
         res.json({ ok: true, user: rows[0] });

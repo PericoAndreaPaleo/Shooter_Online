@@ -76,7 +76,7 @@ import {
     aggiornaHUDLobby, aggiornaHUDPlayers, aggiornaHUDAmmo,
     mostraKillFeed, creaMinimappa,
 } from "./hud.js";
-import { mostraSchermataLobby, registraEventiLobby, initLobby } from "./lobby.js";
+import { mostraSchermataLobby, registraEventiLobby, initLobby, getCachedLobbyList } from "./lobby.js";
 import { mostraMenu, initMenu } from "./menu.js";
 import { creaGunDrawObj } from "./weapons.js";
 import {
@@ -384,22 +384,22 @@ function avvioGioco(userData) {
     const savedToken     = localStorage.getItem("lobbyToken");
 
     if (savedLobbyId && savedToken) {
-        // Aspetta che il server invii la lista lobby prima di verificare
-        // se la lobby esiste ancora
-        state.mainSocket.once("lobbyList", (lobbyList) => {
-            const lobbyStillExists = lobbyList.find(l => l.id === savedLobbyId);
+        // ── FIX: usa la lista lobby già in cache (ricevuta al momento della
+        // connessione socket, prima della schermata auth).
+        // Prima si usava mainSocket.once("lobbyList", ...) ma quell'evento
+        // era già stato emesso e non sarebbe arrivato una seconda volta,
+        // lasciando la schermata di gioco bloccata sullo sfondo di Kaboom.
+        const lobbyList        = getCachedLobbyList();
+        const lobbyStillExists = lobbyList.find(l => l.id === savedLobbyId);
 
-            if (lobbyStillExists) {
-                // La lobby è ancora attiva → connettiti con il token di rejoin
-                connectToLobbyNamespace(savedLobbyId, savedLobbyName || lobbyStillExists.name, savedToken);
-            } else {
-                // La lobby non esiste più → pulisci i dati salvati e mostra la lista
-                localStorage.removeItem("lobbyId");
-                localStorage.removeItem("lobbyName");
-                localStorage.removeItem("lobbyToken");
-                mostraSchermataLobby();
-            }
-        });
+        if (lobbyStillExists) {
+            connectToLobbyNamespace(savedLobbyId, savedLobbyName || lobbyStillExists.name, savedToken);
+        } else {
+            localStorage.removeItem("lobbyId");
+            localStorage.removeItem("lobbyName");
+            localStorage.removeItem("lobbyToken");
+            mostraSchermataLobby();
+        }
     } else {
         // Nessun dato di sessione → mostra la schermata lobby dopo 150ms
         // (piccolo delay per attendere la connessione socket iniziale)

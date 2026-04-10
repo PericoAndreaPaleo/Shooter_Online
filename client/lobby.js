@@ -22,6 +22,17 @@ let connectToLobby      = null;   // funzione di main.js per connettersi a un na
 let cachedLobbyList = [];
 
 /**
+ * Restituisce la lista lobby attualmente in cache (già ricevuta
+ * dal server al momento della connessione socket).
+ * Usata da main.js per il rejoin senza dover aspettare
+ * un ulteriore evento "lobbyList".
+ * @returns {Array}
+ */
+export function getCachedLobbyList() {
+    return cachedLobbyList;
+}
+
+/**
  * Inizializza il modulo lobby con le dipendenze di main.js.
  *
  * @param {Array}    uiLayer            - Array degli oggetti Kaboom UI
