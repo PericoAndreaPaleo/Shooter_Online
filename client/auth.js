@@ -26,7 +26,7 @@ import { calcolaLetterbox } from "./state.js";
 //          "https://miosito.com/shooter/php"
 // NON aggiungere lo slash finale.
 // ============================================================
-const PHP_BASE = "https://IL-TUO-SERVER-PHP.com/php";
+const PHP_BASE = "";
 
 // ── Dipendenza iniettata da main.js ──────────────────────────
 let onAuthSuccess = null;
