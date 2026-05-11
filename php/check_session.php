@@ -2,33 +2,45 @@
 // ============================================================
 // check_session.php — Verifica sessione esistente
 //
-// Riceve via POST: token
-// Controlla che il token esista e non sia scaduto.
-// Risponde con JSON: { ok: true, user: { ... } } oppure { error: "..." }
+// Controlla in ordine:
+//   1. $_SESSION['logged'] — sessione PHP attiva
+//   2. $_COOKIE['auth_token'] — cookie persistente
+//   3. token inviato via POST JSON (dal gioco via fetch)
 // ============================================================
 
 require_once 'db.php';
 
-// Permette chiamate cross-origin dal dominio di Render
 header('Access-Control-Allow-Origin: https://shooter-online.onrender.com');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 header('Content-Type: application/json');
 
-$data  = json_decode(file_get_contents('php://input'), true);
-$token = trim($data['token'] ?? '');
+// Avvia sessione PHP nativa
+session_start();
+
+// Determina il token da usare (sessione > cookie > body POST)
+$token = null;
+
+if (!empty($_SESSION['token'])) {
+    $token = $_SESSION['token'];
+} elseif (!empty($_COOKIE['auth_token'])) {
+    $token = $_COOKIE['auth_token'];
+} else {
+    $data  = json_decode(file_get_contents('php://input'), true);
+    $token = trim($data['token'] ?? '');
+}
 
 if (!$token) {
     http_response_code(400);
-    echo json_encode(['error' => 'Token mancante.']);
+    echo json_encode(['error' => 'Nessuna sessione attiva.']);
     exit;
 }
 
 try {
     $pdo = getDB();
 
-    // JOIN tra sessioni, utenti e statistiche in una sola query
+    // Verifica token nel DB con JOIN
     $stmt = $pdo->prepare('
         SELECT s.utente_id, u.username, g.livello, g.xp, g.kills_totali, g.morti_totali, g.partite
         FROM sessioni s
@@ -40,10 +52,22 @@ try {
     $result = $stmt->fetch();
 
     if (!$result) {
+        // Token scaduto — pulisci sessione e cookie
+        $_SESSION = [];
+        session_destroy();
+        setcookie('auth_token',    '', time() - 3600, '/', '', true, true);
+        setcookie('auth_username', '', time() - 3600, '/', '', true, true);
+
         http_response_code(401);
         echo json_encode(['error' => 'Sessione scaduta o non valida.']);
         exit;
     }
+
+    // Aggiorna $_SESSION con i dati freschi
+    $_SESSION['logged']   = true;
+    $_SESSION['user_id']  = $result['utente_id'];
+    $_SESSION['username'] = $result['username'];
+    $_SESSION['token']    = $token;
 
     echo json_encode(['ok' => true, 'user' => $result]);
 
