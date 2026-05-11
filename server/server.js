@@ -16,6 +16,9 @@ const http    = require("http");
 const { Server } = require("socket.io");
 const crypto  = require("crypto");
 
+// URL base dei PHP (stesso servizio Docker, Apache su porta 8080)
+const PHP_BASE = "http://127.0.0.1:8080";
+
 
 const app    = express();
 const server = http.createServer(app);
@@ -403,8 +406,11 @@ function createLobby(lobbyId, lobbyName, password) {
                     socket.disconnect();
                     return;
                 }
-                nickname = (data && data.username) ? data.username : generateNickname();
+                nickname = generateNickname();
             }
+
+            // Salva token di autenticazione PHP (per aggiornare statistiche alla disconnessione)
+            socket.authToken = (data && data.authToken) || null;
 
             // Assegna token al socket per il futuro rejoin
             const newToken = crypto.randomBytes(16).toString("hex");
@@ -651,6 +657,19 @@ function createLobby(lobbyId, lobbyName, password) {
                     expireAt: Date.now() + REJOIN_TOKEN_TTL,
                 };
                 usedNicknames.delete(socket.nickname);
+            }
+
+            // Salva statistiche nel DB se il giocatore era loggato
+            if (socket.authToken && leaderboardEntry) {
+                fetch(`${PHP_BASE}/salva_statistiche.php`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        token: socket.authToken,
+                        kills: leaderboardEntry.kills  || 0,
+                        morti: leaderboardEntry.deaths || 0,
+                    }),
+                }).catch(() => {}); // ignora errori di rete
             }
 
             // Rimuove il player dalla lobby

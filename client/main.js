@@ -178,7 +178,11 @@ function connectToLobbyNamespace(lobbyId, lobbyName, savedToken) {
     state.socket.on("connect", () => {
         // Usa il token salvato per il rejoin (se disponibile)
         const rejoinToken = localStorage.getItem("lobbyToken");
-        state.socket.emit("join", { token: rejoinToken || null, username: state.accountUsername || null });
+        state.socket.emit("join", {
+            token:     rejoinToken || null,
+            username:  state.accountUsername || null,
+            authToken: localStorage.getItem("auth_token") || null,
+        });
     });
 
     // ── Lobby piena (risposta al join) ─────────────────────────────
