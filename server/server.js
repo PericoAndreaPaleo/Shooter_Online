@@ -403,7 +403,7 @@ function createLobby(lobbyId, lobbyName, password) {
                     socket.disconnect();
                     return;
                 }
-                nickname = generateNickname();
+                nickname = (data && data.username) ? data.username : generateNickname();
             }
 
             // Assegna token al socket per il futuro rejoin
