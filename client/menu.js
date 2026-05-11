@@ -12,6 +12,7 @@
 // ============================================================
 
 import { state, GAME_W, GAME_H, hx, hy, hs, calcolaLetterbox } from "./state.js";
+import { logout, mostraSchermataAuth, initAuth } from "./auth.js";
 
 // ── Dipendenze iniettate da main.js ──────────────────────────────
 let uiElementsArray      = null;   // array condiviso con main.js per cleanup UI
@@ -173,8 +174,69 @@ export function mostraMenu(subtitleMessage) {
         location.reload();
     });
 
+    // ── Riga bottoni Login / Register ─────────────────────────────
+    const authRow = document.createElement("div");
+    authRow.style.cssText = `
+        display: flex;
+        gap: ${Math.round(8 * scaleUI)}px;
+        width: ${buttonWidth}px;
+    `;
+
+    function creaBottoneAuth(label, color) {
+        const btn = document.createElement("button");
+        btn.textContent = label;
+        btn.style.cssText = `
+            flex: 1;
+            height: ${secondaryBtnHeight}px;
+            background: transparent;
+            color: ${color};
+            font-size: ${Math.round(13 * scaleUI)}px;
+            border: 1px solid ${color};
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: monospace;
+            letter-spacing: 1px;
+        `;
+        return btn;
+    }
+
+    const loginBtn    = creaBottoneAuth("LOGIN",    "rgba(0, 200, 255, 0.8)");
+    const registerBtn = creaBottoneAuth("REGISTER", "rgba(0, 255, 100, 0.8)");
+
+    loginBtn.addEventListener("click", () => {
+        // Disconnetti sessione corrente e mostra login
+        logout();
+        localStorage.removeItem("lobbyId");
+        localStorage.removeItem("lobbyName");
+        localStorage.removeItem("lobbyToken");
+        if (state.socket) state.socket.disconnect();
+        initAuth((userData) => { location.reload(); });
+        mostraSchermataAuth();
+    });
+
+    registerBtn.addEventListener("click", () => {
+        // Stessa cosa ma apre direttamente il tab registrazione
+        logout();
+        localStorage.removeItem("lobbyId");
+        localStorage.removeItem("lobbyName");
+        localStorage.removeItem("lobbyToken");
+        if (state.socket) state.socket.disconnect();
+        initAuth((userData) => { location.reload(); });
+        mostraSchermataAuth();
+        // Simula click sul tab "Registrati"
+        setTimeout(() => {
+            const tabs = document.querySelectorAll("button");
+            const tabReg = [...tabs].find(b => b.textContent === "Registrati");
+            if (tabReg) tabReg.click();
+        }, 50);
+    });
+
+    authRow.appendChild(loginBtn);
+    authRow.appendChild(registerBtn);
+
     container.appendChild(playButton);
     container.appendChild(changeLobbyButton);
+    container.appendChild(authRow);
     document.body.appendChild(container);
     setCurrentContainer(container);
 
