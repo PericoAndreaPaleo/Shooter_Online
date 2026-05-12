@@ -178,11 +178,7 @@ function connectToLobbyNamespace(lobbyId, lobbyName, savedToken) {
     state.socket.on("connect", () => {
         // Usa il token salvato per il rejoin (se disponibile)
         const rejoinToken = localStorage.getItem("lobbyToken");
-        state.socket.emit("join", {
-            token:     rejoinToken || null,
-            username:  state.accountUsername || null,
-            authToken: localStorage.getItem("auth_token") || null,
-        });
+        state.socket.emit("join", { token: rejoinToken || null });
     });
 
     // ── Lobby piena (risposta al join) ─────────────────────────────
@@ -377,8 +373,10 @@ function avvioGioco(userData) {
     // userData è null per gli ospiti, oppure { username, livello, xp, ... }
     if (userData) {
         state.accountUsername = userData.username;
-        state.accountLivello  = userData.livello  || 1;
-        state.accountXp       = userData.xp       || 0;
+        state.accountLivello  = userData.livello      || 1;
+        state.accountXp       = userData.xp           || 0;
+        state.accountKills    = userData.kills_totali || userData.kills || 0;
+        state.accountMorti    = userData.morti_totali || userData.morti || 0;
     }
     // ─────────────────────────────────────────────────────────────
 
