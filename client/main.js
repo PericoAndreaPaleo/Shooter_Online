@@ -77,7 +77,7 @@ import {
     mostraKillFeed, creaMinimappa,
 } from "./hud.js";
 import { mostraSchermataLobby, registraEventiLobby, initLobby, getCachedLobbyList } from "./lobby.js";
-import { mostraMenu, initMenu } from "./menu.js";
+import { mostraMenu, initMenu, mostraSchermataStats } from "./menu.js";
 import { creaGunDrawObj } from "./weapons.js";
 import {
     creaTouchUI, rimuoviTouchUI, registraTouchEvents,
@@ -287,6 +287,10 @@ function connectToLobbyNamespace(lobbyId, lobbyName, savedToken) {
     // ── Conferma di kill: ho eliminato un avversario ───────────────
     state.socket.on("killConfirm", ({ victim }) => {
         state.myKills++;
+        // Aggiorna anche le stat account per riflettere la sessione corrente
+        state.accountKills++;
+        state.accountXp += 10;
+        state.accountLivello = Math.max(1, Math.floor(state.accountXp / 100) + 1);
         aggiornaHUDStats();
         mostraKillFeed(`You eliminated ${victim}!`);
         playKillSound();
@@ -343,8 +347,14 @@ function apriAuth(tab) {
     }
 }
 
-initMenu(uiLayer, removeActiveHTMLContainer, destroyAllUI, setActiveHTMLContainer, apriAuth, logout);
-initLobby(uiLayer, destroyAllUI, removeActiveHTMLContainer, setActiveHTMLContainer, connectToLobbyNamespace);
+// Funzione che torna alla lobby senza ricaricare la pagina
+function goToLobby() {
+    destroyAllUI();
+    mostraSchermataLobby();
+}
+
+initMenu(uiLayer, removeActiveHTMLContainer, destroyAllUI, setActiveHTMLContainer, apriAuth, logout, goToLobby);
+initLobby(uiLayer, destroyAllUI, removeActiveHTMLContainer, setActiveHTMLContainer, connectToLobbyNamespace, apriAuth, logout, mostraSchermataStats);
 initGame(destroyAllUI, mostraMenu);
 
 // Callback per cambiaArma: aggiorna tutti gli elementi HUD dopo un cambio arma
@@ -388,8 +398,10 @@ function avvioGioco(userData) {
     // userData è null per gli ospiti, oppure { username, livello, xp, ... }
     if (userData) {
         state.accountUsername = userData.username;
-        state.accountLivello  = userData.livello  || 1;
-        state.accountXp       = userData.xp       || 0;
+        state.accountLivello  = userData.livello        || 1;
+        state.accountXp       = userData.xp             || 0;
+        state.accountKills    = userData.kills          || userData.kills_totali || 0;
+        state.accountMorti    = userData.morti          || userData.morti_totali || 0;
     }
     // ─────────────────────────────────────────────────────────────
 
