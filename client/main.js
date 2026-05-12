@@ -93,7 +93,7 @@ import { playKillSound } from "./audio.js";
 // checkSession        → verifica se l'utente ha già un cookie valido
 // initAuth            → registra il callback da chiamare dopo il login
 // mostraSchermataAuth → mostra la schermata login/registrazione
-import { checkSession, initAuth, mostraSchermataAuth } from "./auth.js";
+import { checkSession, initAuth, mostraSchermataAuth, logout } from "./auth.js";
 // ─────────────────────────────────────────────────────────────
 
 // ============================================================
@@ -328,7 +328,19 @@ function connectToLobbyNamespace(lobbyId, lobbyName, savedToken) {
 // ricevono le dipendenze necessarie tramite funzioni di init.
 // ============================================================
 
-initMenu(uiLayer, removeActiveHTMLContainer, destroyAllUI, setActiveHTMLContainer);
+// Funzione che apre auth con tab specifico (passata a menu.js)
+function apriAuth(tab) {
+    initAuth(avvioGioco);
+    mostraSchermataAuth();
+    if (tab === "register") {
+        setTimeout(() => {
+            const t = [...document.querySelectorAll("button")].find(b => b.textContent === "Registrati");
+            if (t) t.click();
+        }, 50);
+    }
+}
+
+initMenu(uiLayer, removeActiveHTMLContainer, destroyAllUI, setActiveHTMLContainer, apriAuth, logout);
 initLobby(uiLayer, destroyAllUI, removeActiveHTMLContainer, setActiveHTMLContainer, connectToLobbyNamespace);
 initGame(destroyAllUI, mostraMenu);
 
@@ -373,10 +385,8 @@ function avvioGioco(userData) {
     // userData è null per gli ospiti, oppure { username, livello, xp, ... }
     if (userData) {
         state.accountUsername = userData.username;
-        state.accountLivello  = userData.livello      || 1;
-        state.accountXp       = userData.xp           || 0;
-        state.accountKills    = userData.kills_totali || userData.kills || 0;
-        state.accountMorti    = userData.morti_totali || userData.morti || 0;
+        state.accountLivello  = userData.livello  || 1;
+        state.accountXp       = userData.xp       || 0;
     }
     // ─────────────────────────────────────────────────────────────
 
