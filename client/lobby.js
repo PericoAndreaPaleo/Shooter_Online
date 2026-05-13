@@ -17,6 +17,9 @@ let destroyAllUI        = null;
 let hideHTMLOverlay     = null;
 let setCurrentContainer = null;
 let connectToLobby      = null;   // funzione di main.js per connettersi a un namespace
+let _mostraAuth         = null;   // apre schermata login/register
+let _logoutFn           = null;   // esegue logout
+let _mostraStats        = null;   // apre schermata classifica
 
 /** Cache locale dell'ultima lista lobby ricevuta dal server */
 let cachedLobbyList = [];
@@ -41,12 +44,15 @@ export function getCachedLobbyList() {
  * @param {function} setHtmlContainer   - Registra il container HTML attivo
  * @param {function} connettiALobby     - Connette al namespace della lobby scelta
  */
-export function initLobby(uiLayer, distruggiUI, nascondiElementiHTML, setHtmlContainer, connettiALobby) {
+export function initLobby(uiLayer, distruggiUI, nascondiElementiHTML, setHtmlContainer, connettiALobby, mostraAuth, logoutFn, mostraStats) {
     uiElementsArray     = uiLayer;
     destroyAllUI        = distruggiUI;
     hideHTMLOverlay     = nascondiElementiHTML;
     setCurrentContainer = setHtmlContainer;
     connectToLobby      = connettiALobby;
+    _mostraAuth         = mostraAuth;
+    _logoutFn           = logoutFn;
+    _mostraStats        = mostraStats;
 }
 
 // ============================================================
@@ -238,6 +244,59 @@ export function mostraSchermataLobby(errorMessage) {
 
     renderLobbyListItems(lobbyListContainer, cachedLobbyList, uiScale);
     container.appendChild(lobbyListContainer);
+
+    // ── Riga inferiore: STATS + auth ──────────────────────────────
+    const bottomRow = document.createElement("div");
+    bottomRow.style.cssText = `display:flex; gap:${Math.round(8*uiScale)}px; width:100%; margin-top:${Math.round(4*uiScale)}px;`;
+
+    function creaBottomBtn(label, fg) {
+        const btn = document.createElement("button");
+        btn.textContent = label;
+        btn.style.cssText = `
+            flex: 1; padding: ${Math.round(9*uiScale)}px;
+            background: transparent; color: ${fg};
+            font-size: ${scaledPx(13)}; font-family: monospace; letter-spacing: 1px;
+            border: 1px solid ${fg}; border-radius: 6px; cursor: pointer;
+        `;
+        return btn;
+    }
+
+    const statsBtn = creaBottomBtn("STATS", "rgba(0,200,255,0.8)");
+    statsBtn.addEventListener("click", () => {
+        if (_mostraStats) _mostraStats(container);
+    });
+    bottomRow.appendChild(statsBtn);
+
+    if (state.accountUsername) {
+        const logoutBtn = creaBottomBtn("LOGOUT", "rgba(220,80,80,0.8)");
+        logoutBtn.addEventListener("click", async () => {
+            if (_logoutFn) await _logoutFn();
+            state.accountUsername = null;
+            state.accountLivello  = 1;
+            state.accountXp       = 0;
+            state.accountKills    = 0;
+            state.accountMorti    = 0;
+            mostraSchermataLobby();
+        });
+        bottomRow.appendChild(logoutBtn);
+    } else {
+        const loginBtn    = creaBottomBtn("LOGIN",    "rgba(0,200,255,0.8)");
+        const registerBtn = creaBottomBtn("REGISTER", "rgba(0,255,100,0.8)");
+        loginBtn.addEventListener("click",    () => { if (_mostraAuth) _mostraAuth("login");    });
+        registerBtn.addEventListener("click", () => { if (_mostraAuth) _mostraAuth("register"); });
+        bottomRow.appendChild(loginBtn);
+        bottomRow.appendChild(registerBtn);
+    }
+
+    container.appendChild(bottomRow);
+
+    // Mostra username loggato se presente
+    if (state.accountUsername) {
+        const userLabel = document.createElement("div");
+        userLabel.textContent = `👤 ${state.accountUsername}  ·  Lv.${state.accountLivello || 1}`;
+        userLabel.style.cssText = `color:rgba(0,200,255,0.7); font-family:monospace; font-size:${scaledPx(13)}; text-align:center;`;
+        container.appendChild(userLabel);
+    }
 
     document.body.appendChild(container);
     setCurrentContainer(container);

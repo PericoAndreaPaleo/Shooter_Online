@@ -69,6 +69,8 @@ export const state = {
     accountUsername: null,
     accountLivello:  1,
     accountXp:       0,
+    accountKills:    0,
+    accountMorti:    0,
 
     // ── Joystick touch (mobile) ─────────────────────────────────
     aimJoyAngle:  0,                    // angolo di mira dal joystick destro

@@ -559,6 +559,7 @@ export function aggiornaStato(serverSnapshot, canvas) {
             !state.inMenu) {
 
             state.myDeaths++;
+            state.accountMorti++;
             aggiornaHUDStats();
             playDeathSound();
             showSpawnMenu("You were eliminated!");

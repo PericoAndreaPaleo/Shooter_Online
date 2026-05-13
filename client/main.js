@@ -77,7 +77,7 @@ import {
     mostraKillFeed, creaMinimappa,
 } from "./hud.js";
 import { mostraSchermataLobby, registraEventiLobby, initLobby, getCachedLobbyList } from "./lobby.js";
-import { mostraMenu, initMenu } from "./menu.js";
+import { mostraMenu, initMenu, mostraSchermataStats } from "./menu.js";
 import { creaGunDrawObj } from "./weapons.js";
 import {
     creaTouchUI, rimuoviTouchUI, registraTouchEvents,
@@ -93,7 +93,7 @@ import { playKillSound } from "./audio.js";
 // checkSession        → verifica se l'utente ha già un cookie valido
 // initAuth            → registra il callback da chiamare dopo il login
 // mostraSchermataAuth → mostra la schermata login/registrazione
-import { checkSession, initAuth, mostraSchermataAuth } from "./auth.js";
+import { checkSession, initAuth, mostraSchermataAuth, logout } from "./auth.js";
 // ─────────────────────────────────────────────────────────────
 
 // ============================================================
@@ -178,7 +178,11 @@ function connectToLobbyNamespace(lobbyId, lobbyName, savedToken) {
     state.socket.on("connect", () => {
         // Usa il token salvato per il rejoin (se disponibile)
         const rejoinToken = localStorage.getItem("lobbyToken");
-        state.socket.emit("join", { token: rejoinToken || null });
+        state.socket.emit("join", {
+            token:     rejoinToken || null,
+            username:  state.accountUsername || null,
+            authToken: localStorage.getItem("auth_token") || null,  // ← permette al server di salvare le stat nel DB alla disconnessione
+        });
     });
 
     // ── Lobby piena (risposta al join) ─────────────────────────────
@@ -284,6 +288,10 @@ function connectToLobbyNamespace(lobbyId, lobbyName, savedToken) {
     // ── Conferma di kill: ho eliminato un avversario ───────────────
     state.socket.on("killConfirm", ({ victim }) => {
         state.myKills++;
+        // Aggiorna anche le stat account per riflettere la sessione corrente
+        state.accountKills++;
+        state.accountXp += 10;
+        state.accountLivello = Math.max(1, Math.floor(state.accountXp / 100) + 1);
         aggiornaHUDStats();
         mostraKillFeed(`You eliminated ${victim}!`);
         playKillSound();
@@ -328,8 +336,26 @@ function connectToLobbyNamespace(lobbyId, lobbyName, savedToken) {
 // ricevono le dipendenze necessarie tramite funzioni di init.
 // ============================================================
 
-initMenu(uiLayer, removeActiveHTMLContainer, destroyAllUI, setActiveHTMLContainer);
-initLobby(uiLayer, destroyAllUI, removeActiveHTMLContainer, setActiveHTMLContainer, connectToLobbyNamespace);
+// Funzione che apre auth con tab specifico (passata a menu.js)
+function apriAuth(tab) {
+    initAuth(avvioGioco);
+    mostraSchermataAuth();
+    if (tab === "register") {
+        setTimeout(() => {
+            const t = [...document.querySelectorAll("button")].find(b => b.textContent === "Registrati");
+            if (t) t.click();
+        }, 50);
+    }
+}
+
+// Funzione che torna alla lobby senza ricaricare la pagina
+function goToLobby() {
+    destroyAllUI();
+    mostraSchermataLobby();
+}
+
+initMenu(uiLayer, removeActiveHTMLContainer, destroyAllUI, setActiveHTMLContainer, apriAuth, logout, goToLobby);
+initLobby(uiLayer, destroyAllUI, removeActiveHTMLContainer, setActiveHTMLContainer, connectToLobbyNamespace, apriAuth, logout, mostraSchermataStats);
 initGame(destroyAllUI, mostraMenu);
 
 // Callback per cambiaArma: aggiorna tutti gli elementi HUD dopo un cambio arma
@@ -373,8 +399,10 @@ function avvioGioco(userData) {
     // userData è null per gli ospiti, oppure { username, livello, xp, ... }
     if (userData) {
         state.accountUsername = userData.username;
-        state.accountLivello  = userData.livello  || 1;
-        state.accountXp       = userData.xp       || 0;
+        state.accountLivello  = userData.livello        || 1;
+        state.accountXp       = userData.xp             || 0;
+        state.accountKills    = userData.kills          || userData.kills_totali || 0;
+        state.accountMorti    = userData.morti          || userData.morti_totali || 0;
     }
     // ─────────────────────────────────────────────────────────────
 
