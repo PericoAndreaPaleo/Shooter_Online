@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="it">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -8,6 +8,22 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: black; overflow: hidden; touch-action: none; }
     canvas { display: block; cursor: crosshair; }
+
+    /* Stili responsivi per la schermata di auth su schermi piccoli */
+    @media (max-width: 480px) {
+        .auth-card {
+            width: 95vw !important;
+            padding: 16px !important;
+        }
+    }
+
+    @media (max-height: 500px) and (orientation: landscape) {
+        .auth-container {
+            justify-content: flex-start !important;
+            padding-top: 10px !important;
+            overflow-y: auto !important;
+        }
+    }
 </style>
 </head>
 <body>

@@ -4,16 +4,10 @@
 //
 // Riceve via POST: username, email, password
 // Risponde con JSON: { ok: true, userId: X } oppure { error: "..." }
-//
-// Test con il form test.html oppure con curl:
-//   curl -X POST http://localhost/php/register.php \
-//        -H "Content-Type: application/json" \
-//        -d '{"username":"Mario","email":"mario@test.it","password":"123456"}'
 // ============================================================
 
 require_once 'db.php';
 
-// Permette chiamate cross-origin dal dominio di Render
 header('Access-Control-Allow-Origin: https://shooter-online.onrender.com');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
@@ -27,21 +21,31 @@ $email    = trim($data['email']    ?? '');
 $password = $data['password']      ?? '';
 
 // ── Validazione ───────────────────────────────────────────────
+
 if (!$username || !$email || !$password) {
     http_response_code(400);
     echo json_encode(['error' => 'Campi mancanti.']);
     exit;
 }
 
-if (strlen($username) < 3 || strlen($username) > 30) {
+// Username: solo lettere, numeri, underscore e trattino (3-30 caratteri)
+if (!filter_var($username, FILTER_VALIDATE_REGEXP, ['options' => ['regexp' => '/^[a-zA-Z0-9_\-]{3,30}$/']]) ) {
     http_response_code(400);
-    echo json_encode(['error' => 'Username deve essere tra 3 e 30 caratteri.']);
+    echo json_encode(['error' => 'Username non valido (3-30 caratteri: lettere, numeri, _ o -).']);
     exit;
 }
 
+// Email: validazione con filter_var
 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     http_response_code(400);
     echo json_encode(['error' => 'Email non valida.']);
+    exit;
+}
+
+// Lunghezza email ragionevole
+if (strlen($email) > 100) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Email troppo lunga.']);
     exit;
 }
 
@@ -66,18 +70,26 @@ try {
     // Hash della password con bcrypt
     $hash = password_hash($password, PASSWORD_BCRYPT);
 
-    // Inserisce il nuovo utente
+    // ── Transazione: le due INSERT devono avere successo insieme ──
+    $pdo->beginTransaction();
+
     $stmt = $pdo->prepare('INSERT INTO utenti (username, email, password_hash) VALUES (?, ?, ?)');
     $stmt->execute([$username, $email, $hash]);
     $newId = $pdo->lastInsertId();
 
-    // Crea la riga statistiche vuota per il nuovo utente
     $stmt = $pdo->prepare('INSERT INTO statistiche_giocatore (utente_id) VALUES (?)');
     $stmt->execute([$newId]);
+
+    $pdo->commit();
+    // ──────────────────────────────────────────────────────────────
 
     echo json_encode(['ok' => true, 'userId' => $newId]);
 
 } catch (Exception $e) {
+    // Se qualcosa va storto, annulla tutto
+    if (isset($pdo) && $pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
     http_response_code(500);
     echo json_encode(['error' => 'Errore server: ' . $e->getMessage()]);
 }
