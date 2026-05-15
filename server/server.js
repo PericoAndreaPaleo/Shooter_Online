@@ -549,9 +549,8 @@ function createLobby(lobbyId, lobbyName, password) {
             player.hp     = 0;
             player.isDead = true;
             player.dir    = { x: 0, y: 0 };
-            if (lobby.leaderboard[socket.id]) {
-                lobby.leaderboard[socket.id].deaths++;
-            }
+            // NON incrementare deaths: selfKill è una scelta volontaria
+            // (torna al menu con ESC), non una morte in combattimento.
         });
 
         // ── shoot ─────────────────────────────────────────────────
@@ -659,27 +658,17 @@ function createLobby(lobbyId, lobbyName, password) {
                 usedNicknames.delete(socket.nickname);
             }
 
-            // Salva statistiche nel DB se il giocatore era loggato.
-            // Ritenta una volta in caso di errore di rete (es. cold start Render).
+            // Salva statistiche nel DB se il giocatore era loggato
             if (socket.authToken && leaderboardEntry) {
-                const salvaPayload = JSON.stringify({
-                    token: socket.authToken,
-                    kills: leaderboardEntry.kills  || 0,
-                    morti: leaderboardEntry.deaths || 0,
-                });
-                const salvaOpts = {
-                    method:  "POST",
+                fetch(`${PHP_BASE}/salva_statistiche.php`, {
+                    method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body:    salvaPayload,
-                };
-                fetch(`${PHP_BASE}/salva_statistiche.php`, salvaOpts)
-                    .catch(() => {
-                        // Primo tentativo fallito: riprova dopo 3 secondi
-                        setTimeout(() => {
-                            fetch(`${PHP_BASE}/salva_statistiche.php`, salvaOpts)
-                                .catch(() => {}); // se fallisce di nuovo, rinunciamo
-                        }, 3000);
-                    });
+                    body: JSON.stringify({
+                        token: socket.authToken,
+                        kills: leaderboardEntry.kills  || 0,
+                        morti: leaderboardEntry.deaths || 0,
+                    }),
+                }).catch(() => {}); // ignora errori di rete
             }
 
             // Rimuove il player dalla lobby

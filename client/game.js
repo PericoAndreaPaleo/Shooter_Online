@@ -551,18 +551,27 @@ export function aggiornaStato(serverSnapshot, canvas) {
         const serverPlayerData = serverSnapshot.players[playerId];
         const isLocalPlayer    = (playerId === state.myId);
 
-        // Gestisci transizione da vivo → morto per il giocatore locale
+        // Gestisci transizione da vivo → morto per il giocatore locale.
+        // Il flag `_morteContata` evita che snapshot multipli ricevuti
+        // mentre il giocatore è già morto contino la stessa morte più volte.
         if (isLocalPlayer &&
             serverPlayerData.morto &&
             state.players[playerId] &&
             !state.players[playerId].morto &&
+            !state.players[playerId]._morteContata &&
             !state.inMenu) {
 
+            state.players[playerId]._morteContata = true;
             state.myDeaths++;
             state.accountMorti++;
             aggiornaHUDStats();
             playDeathSound();
             showSpawnMenu("You were eliminated!");
+        }
+
+        // Reset del flag quando il giocatore torna vivo
+        if (isLocalPlayer && !serverPlayerData.morto && state.players[playerId]) {
+            state.players[playerId]._morteContata = false;
         }
 
         // ── Nuovo giocatore: crea sprite ─────────────────────────

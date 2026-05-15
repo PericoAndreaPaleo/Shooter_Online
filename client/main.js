@@ -89,6 +89,38 @@ import {
 } from "./game.js";
 import { playKillSound } from "./audio.js";
 
+// ============================================================
+// SALVATAGGIO STATISTICHE — funzione centralizzata
+//
+// Chiamata in 3 momenti:
+//   1. Bottone "← LOBBY" nel menu spawn
+//   2. Logout
+//   3. pagehide (chiusura tab / finestra / mobile swipe-away)
+//
+// Usa sendBeacon (garantito anche post-unload) con fallback fetch.
+// Dopo il salvataggio azzera i contatori per non salvare doppio.
+// ============================================================
+export function salvaStat() {
+    const token  = localStorage.getItem("auth_token");
+    const kills  = state.myKills  || 0;
+    const morti  = state.myDeaths || 0;
+
+    if (!token || (kills === 0 && morti === 0)) return;
+
+    const payload = JSON.stringify({ token, kills, morti });
+    const url     = "/php/salva_statistiche.php";
+
+    if (navigator.sendBeacon) {
+        navigator.sendBeacon(url, new Blob([payload], { type: "application/json" }));
+    } else {
+        fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: payload, keepalive: true }).catch(() => {});
+    }
+
+    // Azzera i contatori di sessione così non salviamo doppio
+    state.myKills  = 0;
+    state.myDeaths = 0;
+}
+
 // ── AGGIUNTA: import modulo autenticazione ───────────────────
 // checkSession        → verifica se l'utente ha già un cookie valido
 // initAuth            → registra il callback da chiamare dopo il login
@@ -456,38 +488,5 @@ initAuth(avvioGioco);
     }
 })();
 // ─────────────────────────────────────────────────────────────
-// ============================================================
-// SALVATAGGIO STATISTICHE GARANTITO ALLA CHIUSURA
-//
-// `pagehide` è l'unico evento affidabile su tutti i browser
-// (Chrome, Safari mobile, Firefox) anche quando si chiude
-// la tab o la finestra senza fare logout.
-// `sendBeacon` invia la richiesta POST in background anche
-// dopo che il documento è stato scaricato — non viene
-// annullata come farebbe un normale fetch().
-// ============================================================
-window.addEventListener("pagehide", () => {
-    const token  = localStorage.getItem("auth_token");
-    const kills  = state.myKills  || 0;
-    const deaths = state.myDeaths || 0;
-
-    // Invia solo se loggato e ha giocato almeno una partita
-    if (!token || (kills === 0 && deaths === 0)) return;
-
-    const payload = JSON.stringify({ token, kills, morti: deaths });
-    const url     = "/php/salva_statistiche.php";
-
-    // sendBeacon è garantito anche su chiusura tab (fetch non lo è)
-    if (navigator.sendBeacon) {
-        const blob = new Blob([payload], { type: "application/json" });
-        navigator.sendBeacon(url, blob);
-    } else {
-        // Fallback per browser molto vecchi
-        fetch(url, {
-            method:     "POST",
-            headers:    { "Content-Type": "application/json" },
-            body:       payload,
-            keepalive:  true,   // permette al fetch di completare dopo unload
-        }).catch(() => {});
-    }
-});
+// Salva stats alla chiusura della tab/finestra (pagehide garantito anche su mobile)
+window.addEventListener("pagehide", () => salvaStat());

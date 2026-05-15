@@ -3,6 +3,7 @@
 // ============================================================
 
 import { state, GAME_W, GAME_H, hx, hy, hs, calcolaLetterbox } from "./state.js";
+import { salvaStat } from "./main.js";
 
 // ── Dipendenze iniettate da main.js ──────────────────────────────
 let uiElementsArray      = null;
@@ -148,16 +149,19 @@ export function mostraMenu(subtitleMessage) {
 
     const lobbyBtn = creaBtn("← LOBBY", "rgba(255,255,255,0.5)");
     lobbyBtn.addEventListener("click", () => {
+        // Salva kills/morti PRIMA di azzerare i contatori e disconnettersi
+        salvaStat();
+
         localStorage.removeItem("lobbyId");
         localStorage.removeItem("lobbyName");
         localStorage.removeItem("lobbyToken");
         if (state.socket) { state.socket.disconnect(); state.socket = null; }
-        state.myId = null;
+        state.myId      = null;
         state.myLobbyId = null;
         state.myLobbyName = null;
-        state.myToken = null;
-        state.myKills = 0;
-        state.myDeaths = 0;
+        state.myToken   = null;
+        state.myKills   = 0;
+        state.myDeaths  = 0;
         if (_goToLobby) _goToLobby();
     });
 
@@ -176,6 +180,8 @@ export function mostraMenu(subtitleMessage) {
         // Loggato → solo LOGOUT
         const logoutBtn = creaBtn("LOGOUT", "rgba(220,80,80,0.8)");
         logoutBtn.addEventListener("click", async () => {
+            // Salva kills/morti PRIMA del logout e del reload
+            salvaStat();
             if (_logout) await _logout();
             state.accountUsername = null;
             state.accountLivello  = 1;
