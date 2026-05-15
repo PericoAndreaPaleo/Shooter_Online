@@ -560,11 +560,12 @@ function createLobby(lobbyId, lobbyName, password) {
             const player = lobby.players[socket.id];
             if (!player || player.isDead) return;
 
+            // Uscita volontaria (ESC → menu di spawn):
+            // NON incrementa deaths nel leaderboard e NON chiama salvaDelta.
+            // La morte volontaria non conta mai come morte in combattimento.
             player.hp     = 0;
             player.isDead = true;
             player.dir    = { x: 0, y: 0 };
-            // NON incrementare deaths: selfKill è una scelta volontaria
-            // (torna al menu con ESC), non una morte in combattimento.
         });
 
         // ── shoot ─────────────────────────────────────────────────
@@ -606,22 +607,25 @@ function createLobby(lobbyId, lobbyName, password) {
                     while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
                     if (Math.abs(angleDiff) > Math.PI / 2) continue;
 
-                    // Infliggi danno
+                    // Infliggi danno — un pugno colpisce esattamente 1 nemico:
+                    // il primo trovato nel cono. Il break finale garantisce
+                    // che salvaDelta venga chiamato al massimo 1 volta per punch.
                     target.hp -= DAMAGE_BY_WEAPON.fists;
                     target.hitFlash  = true;
                     target.lastHitTime = now;
 
-                    if (target.hp <= 0) {
+                    if (target.hp <= 0 && !target.isDead) {
                         target.hp     = 0;
                         target.isDead = true;
                         target.dir    = { x: 0, y: 0 };
                         if (lobby.leaderboard[targetId])  lobby.leaderboard[targetId].deaths++;
                         if (lobby.leaderboard[socket.id]) lobby.leaderboard[socket.id].kills++;
-                        // Salva delta in tempo reale
-                        salvaDelta(socket.authToken, 1, 0);               // +1 kill al killer
-                        salvaDelta(target.authToken,  0, 1);               // +1 morte alla vittima
+                        // Salva delta in tempo reale (+1 per evento, mai duplicato)
+                        salvaDelta(socket.authToken, 1, 0); // +1 kill al killer
+                        salvaDelta(target.authToken,  0, 1); // +1 morte alla vittima
                         lobby.namespace.to(socket.id).emit("killConfirm", { victim: target.nickname });
                     }
+                    break; // fists: 1 nemico per pugno — evita kills multipli da un colpo solo
                 }
                 return; // corpo a corpo: nessun proiettile da creare
             }
@@ -888,13 +892,17 @@ setInterval(() => {
                     target.lastHitTime = now;
                     hitPlayer = true;
 
-                    if (target.hp <= 0) {
+                    // Doppio guard su isDead: il check esterno previene di
+                    // processare giocatori già morti; questo interno garantisce
+                    // che salvaDelta non venga mai chiamato due volte per
+                    // lo stesso giocatore anche in edge case di tick sovrappositi.
+                    if (target.hp <= 0 && !target.isDead) {
                         target.hp     = 0;
                         target.isDead = true;
                         target.dir    = { x: 0, y: 0 };
-                        if (lobby.leaderboard[targetId])    lobby.leaderboard[targetId].deaths++;
+                        if (lobby.leaderboard[targetId])       lobby.leaderboard[targetId].deaths++;
                         if (lobby.leaderboard[bullet.ownerId]) lobby.leaderboard[bullet.ownerId].kills++;
-                        // Salva delta in tempo reale
+                        // Salva delta in tempo reale (+1 per evento, mai duplicato)
                         const killer = lobby.players[bullet.ownerId];
                         salvaDelta(killer ? killer.authToken : null, 1, 0); // +1 kill
                         salvaDelta(target.authToken, 0, 1);                 // +1 morte
