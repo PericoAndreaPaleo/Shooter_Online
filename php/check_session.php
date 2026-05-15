@@ -32,7 +32,7 @@ if (!empty($_SESSION['token'])) {
 
 if (!$token) {
     http_response_code(400);
-    echo json_encode(['error' => 'Nessuna sessione attiva.']);
+    echo json_encode(['error' => 'No active session.']);
     exit;
 }
 
@@ -55,7 +55,7 @@ try {
         setcookie('auth_token',    '', time() - 3600, '/', '', true, true);
         setcookie('auth_username', '', time() - 3600, '/', '', true, true);
         http_response_code(401);
-        echo json_encode(['error' => 'Sessione scaduta o non valida.']);
+        echo json_encode(['error' => 'Session expired or invalid.']);
         exit;
     }
 

@@ -593,7 +593,7 @@ export function aggiornaStato(serverSnapshot, canvas) {
                 ? add([
                     pos(serverPlayerData.pos.x, serverPlayerData.pos.y + 40),
                     anchor("center"),
-                    text(state.myNickname || "TU", { size: 17 }),
+                    text(state.myNickname || "ME", { size: 17 }),
                     color(rgb(0, 220, 255)),
                     z(0.5),
                 ])
@@ -671,7 +671,7 @@ export function aggiornaStato(serverSnapshot, canvas) {
                     localPlayerData.labelObj = add([
                         pos(serverPlayerData.pos.x, serverPlayerData.pos.y + 40),
                         anchor("center"),
-                        text(state.myNickname || "TU", { size: 17 }),
+                        text(state.myNickname || "ME", { size: 17 }),
                         color(rgb(0, 220, 255)),
                         z(0.5),
                     ]);

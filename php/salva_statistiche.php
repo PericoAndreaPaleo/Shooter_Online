@@ -24,7 +24,7 @@ $morti = intval($data['morti'] ?? 0);
 
 if (!$token) {
     http_response_code(400);
-    echo json_encode(['error' => 'Token mancante.']);
+    echo json_encode(['error' => 'Missing token.']);
     exit;
 }
 
@@ -41,7 +41,7 @@ try {
 
     if (!$row) {
         http_response_code(401);
-        echo json_encode(['error' => 'Token non valido.']);
+        echo json_encode(['error' => 'Invalid token.']);
         exit;
     }
 

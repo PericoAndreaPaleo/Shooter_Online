@@ -24,7 +24,7 @@ $password = $data['password']      ?? '';
 
 if (!$username || !$email || !$password) {
     http_response_code(400);
-    echo json_encode(['error' => 'Campi mancanti.']);
+    echo json_encode(['error' => 'Missing fields.']);
     exit;
 }
 
@@ -38,7 +38,7 @@ if (!filter_var($username, FILTER_VALIDATE_REGEXP, ['options' => ['regexp' => '/
 // Email: validazione con filter_var
 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     http_response_code(400);
-    echo json_encode(['error' => 'Email non valida.']);
+    echo json_encode(['error' => 'Invalid email address.']);
     exit;
 }
 
@@ -51,7 +51,7 @@ if (strlen($email) > 100) {
 
 if (strlen($password) < 6) {
     http_response_code(400);
-    echo json_encode(['error' => 'Password troppo corta (minimo 6 caratteri).']);
+    echo json_encode(['error' => 'Password too short (minimum 6 characters).']);
     exit;
 }
 
@@ -63,7 +63,7 @@ try {
     $stmt->execute([$username, $email]);
     if ($stmt->fetch()) {
         http_response_code(409);
-        echo json_encode(['error' => 'Username o email già in uso.']);
+        echo json_encode(['error' => 'Username or email already in use.']);
         exit;
     }
 

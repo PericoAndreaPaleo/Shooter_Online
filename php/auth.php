@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION = [];
         session_destroy();
 
-        $message = 'Logout effettuato.';
+        $message = 'Logged out successfully.';
         $msgType = 'success';
     }
 
@@ -77,7 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $user = $stmt->fetch();
 
                 if (!$user || !password_verify($password, $user['password_hash'])) {
-                    $message = 'Credenziali errate.';
+                    $message = 'Invalid credentials.';
                     $msgType = 'error';
                 } else {
                     // Genera token sicuro
@@ -103,7 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     setcookie('auth_token',    $token,    $cookieExpire, '/', '', true, true);
                     setcookie('auth_username', $username, $cookieExpire, '/', '', true, true);
 
-                    $message = 'Login effettuato. Bentornato, ' . htmlspecialchars($username) . '!';
+                    $message = 'Welcome back, ' . htmlspecialchars($username) . '!';
                     $msgType = 'success';
                 }
             } catch (Exception $e) {
@@ -123,19 +123,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Validazione
         if (!$username || !$email || !$password || !$password2) {
-            $message = 'Compila tutti i campi.';
+            $message = 'Please fill in all fields.';
             $msgType = 'error';
         } elseif (strlen($username) < 3 || strlen($username) > 30) {
-            $message = 'Username deve essere tra 3 e 30 caratteri.';
+            $message = 'Username must be between 3 and 30 characters.';
             $msgType = 'error';
         } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $message = 'Email non valida.';
+            $message = 'Invalid email address.';
             $msgType = 'error';
         } elseif (strlen($password) < 6) {
-            $message = 'Password troppo corta (minimo 6 caratteri).';
+            $message = 'Password too short (minimum 6 characters).';
             $msgType = 'error';
         } elseif ($password !== $password2) {
-            $message = 'Le password non coincidono.';
+            $message = 'Passwords do not match.';
             $msgType = 'error';
         } else {
             try {
@@ -145,7 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $pdo->prepare('SELECT id FROM utenti WHERE username = ? OR email = ?');
                 $stmt->execute([$username, $email]);
                 if ($stmt->fetch()) {
-                    $message = 'Username o email già in uso.';
+                    $message = 'Username or email already in use.';
                     $msgType = 'error';
                 } else {
                     // ── Transazione ───────────────────────────
@@ -162,7 +162,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         $pdo->commit();
 
-                        $message = 'Account creato con successo! Ora puoi accedere.';
+                        $message = 'Account created! You can now log in.';
                         $msgType = 'success';
                         $action  = 'show_login'; // mostra form login dopo registrazione
                     } catch (Exception $e) {
@@ -426,7 +426,7 @@ $showRegister = ($action === 'register' && $msgType === 'error') || $action === 
 
 <h1>SHOOTER ONLINE</h1>
 <p class="subtitle">
-    <?php echo $loggedUser ? 'Bentornato!' : 'Accedi per giocare'; ?>
+    <?php echo $loggedUser ? 'Welcome back!' : 'Log in to play'; ?>
 </p>
 
 <div class="card">
@@ -434,15 +434,15 @@ $showRegister = ($action === 'register' && $msgType === 'error') || $action === 
 <?php if ($loggedUser): ?>
     <!-- ── Utente già loggato ─────────────────────────────── -->
     <div class="logged-box">
-        <div style="color:rgba(255,255,255,0.5); font-size:13px;">Sei connesso come</div>
+        <div style="color:rgba(255,255,255,0.5); font-size:13px;">Logged in as</div>
         <div class="username"><?= htmlspecialchars($loggedUser) ?></div>
-        <div class="info">Sessione attiva · Cookie impostato</div>
+        <div class="info">Active session · Cookie set</div>
 
         <?php if ($message): ?>
             <div class="message <?= $msgType ?>"><?= htmlspecialchars($message) ?></div>
         <?php endif; ?>
 
-        <a href="/" class="btn-play">▶ GIOCA</a>
+        <a href="/" class="btn-play">▶ PLAY</a>
 
         <form method="POST" action="<?= htmlspecialchars($_SERVER['PHP_SELF']) ?>">
             <input type="hidden" name="action" value="logout">
@@ -454,9 +454,9 @@ $showRegister = ($action === 'register' && $msgType === 'error') || $action === 
     <!-- ── Tab login / registrazione ─────────────────────── -->
     <div class="tab-row">
         <button class="tab <?= !$showRegister ? 'active' : '' ?>"
-                onclick="showTab('login')" type="button">Accedi</button>
+                onclick="showTab('login')" type="button">Log in</button>
         <button class="tab <?= $showRegister ? 'active' : '' ?>"
-                onclick="showTab('register')" type="button">Registrati</button>
+                onclick="showTab('register')" type="button">Sign up</button>
     </div>
 
     <?php if ($message): ?>
@@ -480,7 +480,7 @@ $showRegister = ($action === 'register' && $msgType === 'error') || $action === 
             </div>
             <button type="submit" class="btn-main">ACCEDI</button>
         </form>
-        <button class="btn-guest" onclick="window.location='/'">Gioca come ospite</button>
+        <button class="btn-guest" onclick="window.location='/'">Play as guest</button>
     </div>
 
     <!-- ── Form REGISTRAZIONE ────────────────────────────── -->
@@ -496,12 +496,12 @@ $showRegister = ($action === 'register' && $msgType === 'error') || $action === 
                        value="<?= htmlspecialchars($_POST['email'] ?? '') ?>">
                 <input type="password" name="password" placeholder="Password"
                        minlength="6" required autocomplete="new-password">
-                <input type="password" name="password2" placeholder="Ripeti password"
+                <input type="password" name="password2" placeholder="Confirm password"
                        minlength="6" required autocomplete="new-password">
             </div>
             <button type="submit" class="btn-main">REGISTRATI</button>
         </form>
-        <button class="btn-guest" onclick="window.location='/'">Gioca come ospite</button>
+        <button class="btn-guest" onclick="window.location='/'">Play as guest</button>
     </div>
 
 <?php endif; ?>

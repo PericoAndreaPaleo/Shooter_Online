@@ -134,7 +134,7 @@ export function mostraSchermataLobby(errorMessage) {
     `;
 
     const createButton = document.createElement("button");
-    createButton.textContent = "+ CREA";
+    createButton.textContent = "+ CREATE";
     createButton.style.cssText = `
         padding:    ${Math.round(10 * uiScale)}px ${Math.round(16 * uiScale)}px;
         background: rgb(0, 160, 70);
@@ -382,7 +382,7 @@ function renderLobbyListItems(container, lobbyList, uiScale = 1) {
 
         // Pulsante ENTRA
         const joinButton = document.createElement("button");
-        joinButton.textContent = "ENTRA";
+        joinButton.textContent = "JOIN";
         joinButton.disabled    = isFull;
         joinButton.style.cssText = `
             padding:     ${Math.round(8 * uiScale)}px ${Math.round(16 * uiScale)}px;

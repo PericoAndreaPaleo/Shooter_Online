@@ -128,7 +128,7 @@ export function mostraSchermataAuth(errorMsg = "") {
     `;
 
     const subtitle = document.createElement("div");
-    subtitle.textContent = "Accedi per giocare";
+    subtitle.textContent = "Log in to play";
     subtitle.style.cssText = `
         font-size:      ${Math.round(14 * scale)}px;
         color:          rgba(255,255,255,0.5);
@@ -157,8 +157,8 @@ export function mostraSchermataAuth(errorMsg = "") {
 
     let activeTab = "login";
 
-    const tabLogin = _creaTab("Accedi",     scale, true);
-    const tabReg   = _creaTab("Registrati", scale, false);
+    const tabLogin = _creaTab("Log in",     scale, true);
+    const tabReg   = _creaTab("Sign up", scale, false);
 
     const fontSize    = `${Math.round(14 * scale)}px`;
     const inputHeight = `${Math.round(40 * scale)}px`;
@@ -179,7 +179,7 @@ export function mostraSchermataAuth(errorMsg = "") {
     const inputUser  = _creaInput("text",     "Username",       inputStyle);
     const inputEmail = _creaInput("email",    "Email",          inputStyle);
     const inputPass  = _creaInput("password", "Password",       inputStyle);
-    const inputPass2 = _creaInput("password", "Ripeti password", inputStyle);
+    const inputPass2 = _creaInput("password", "Confirm password", inputStyle);
 
     inputEmail.style.display = "none";
     inputPass2.style.display = "none";
@@ -194,7 +194,7 @@ export function mostraSchermataAuth(errorMsg = "") {
     if (errorMsg) msgBox.textContent = errorMsg;
 
     const btnAzione = document.createElement("button");
-    btnAzione.textContent = "ACCEDI";
+    btnAzione.textContent = "LOG IN";
     btnAzione.style.cssText = `
         height:          ${Math.round(46 * scale)}px;
         background:      rgb(0, 180, 70);
@@ -210,7 +210,7 @@ export function mostraSchermataAuth(errorMsg = "") {
     `;
 
     const btnOspite = document.createElement("button");
-    btnOspite.textContent = "Gioca come ospite";
+    btnOspite.textContent = "Play as guest";
     btnOspite.style.cssText = `
         height:          ${Math.round(36 * scale)}px;
         background:      transparent;
@@ -233,7 +233,7 @@ export function mostraSchermataAuth(errorMsg = "") {
             tabReg.style.borderColor   = "rgba(255,255,255,0.15)";
             inputEmail.style.display   = "none";
             inputPass2.style.display   = "none";
-            btnAzione.textContent      = "ACCEDI";
+            btnAzione.textContent      = "LOG IN";
         } else {
             tabReg.style.background    = "rgba(0,255,100,0.15)";
             tabReg.style.color         = "rgb(0,255,100)";
@@ -243,7 +243,7 @@ export function mostraSchermataAuth(errorMsg = "") {
             tabLogin.style.borderColor = "rgba(255,255,255,0.15)";
             inputEmail.style.display   = "block";
             inputPass2.style.display   = "block";
-            btnAzione.textContent      = "REGISTRATI";
+            btnAzione.textContent      = "SIGN UP";
         }
         msgBox.textContent = "";
     }
@@ -274,7 +274,7 @@ export function mostraSchermataAuth(errorMsg = "") {
 
         if (activeTab === "login") {
             if (!username || !password) {
-                msgBox.textContent = "Inserisci username e password."; return;
+                msgBox.textContent = "Enter username and password."; return;
             }
             btnAzione.textContent = "...";
             btnAzione.disabled    = true;
@@ -293,23 +293,23 @@ export function mostraSchermataAuth(errorMsg = "") {
                     rimuoviSchermataAuth();
                     if (onAuthSuccess) onAuthSuccess(data);
                 } else {
-                    msgBox.textContent    = data.error || "Errore login.";
-                    btnAzione.textContent = "ACCEDI";
+                    msgBox.textContent    = data.error || "Login error.";
+                    btnAzione.textContent = "LOG IN";
                     btnAzione.disabled    = false;
                 }
             } catch (_) {
-                msgBox.textContent    = "Errore di rete.";
-                btnAzione.textContent = "ACCEDI";
+                msgBox.textContent    = "Network error.";
+                btnAzione.textContent = "LOG IN";
                 btnAzione.disabled    = false;
             }
 
         } else {
             // ── Registrazione ──────────────────────────────────
             if (!username || !email || !password || !password2) {
-                msgBox.textContent = "Compila tutti i campi."; return;
+                msgBox.textContent = "Please fill in all fields."; return;
             }
             if (password !== password2) {
-                msgBox.textContent = "Le password non coincidono."; return;
+                msgBox.textContent = "Passwords do not match."; return;
             }
             btnAzione.textContent = "...";
             btnAzione.disabled    = true;
@@ -337,18 +337,18 @@ export function mostraSchermataAuth(errorMsg = "") {
                         if (onAuthSuccess) onAuthSuccess(dataLogin);
                     } else {
                         msgBox.style.color = "rgb(0, 220, 100)";
-                        msgBox.textContent = "Account creato! Ora accedi.";
+                        msgBox.textContent = "Account created! You can now log in.";
                         switchTab("login");
                         btnAzione.disabled = false;
                     }
                 } else {
-                    msgBox.textContent    = data.error || "Errore registrazione.";
-                    btnAzione.textContent = "REGISTRATI";
+                    msgBox.textContent    = data.error || "Registration error.";
+                    btnAzione.textContent = "SIGN UP";
                     btnAzione.disabled    = false;
                 }
             } catch (_) {
-                msgBox.textContent    = "Errore di rete.";
-                btnAzione.textContent = "REGISTRATI";
+                msgBox.textContent    = "Network error.";
+                btnAzione.textContent = "SIGN UP";
                 btnAzione.disabled    = false;
             }
         }

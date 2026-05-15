@@ -46,7 +46,7 @@ export function mostraMenu(subtitleMessage) {
     ]));
 
     // Nome: username se loggato, nickname random se ospite
-    const displayName = state.accountUsername || state.myNickname || "Ospite";
+    const displayName = state.accountUsername || state.myNickname || "Guest";
     uiElementsArray.push(add([
         text(displayName, { size: hs(22) }),
         pos(centerX, hy(GAME_H / 2 - 70)),
@@ -225,7 +225,7 @@ export async function mostraSchermataStats(parentContainer) {
     `;
 
     const title = document.createElement("div");
-    title.textContent = "CLASSIFICA GLOBALE";
+    title.textContent = "GLOBAL LEADERBOARD";
     title.style.cssText = `font-size:${Math.round(28*scaleUI)}px; color:rgb(0,255,100);
         letter-spacing:3px; margin-bottom:${Math.round(20*scaleUI)}px;`;
 
@@ -244,7 +244,7 @@ export async function mostraSchermataStats(parentContainer) {
             color:rgba(255,255,255,0.75); margin-bottom:${Math.round(14*scaleUI)}px; text-align:center; line-height:1.8;`;
         myBox.innerHTML = `<span style="color:rgb(0,200,255);font-size:${Math.round(16*scaleUI)}px;font-weight:bold">${state.accountUsername}</span><br>
             <span style="color:rgb(0,255,100)">Lv.${lv}</span> &nbsp;·&nbsp; <span style="color:rgb(255,200,0)">${xp} XP</span><br>
-            Kills: <b style="color:#8f8">${k}</b> &nbsp; Morti: <b style="color:#f88">${d}</b> &nbsp; K/D: <b style="color:#ff8">${kd}</b>`;
+            Kills: <b style="color:#8f8">${k}</b> &nbsp; Deaths: <b style="color:#f88">${d}</b> &nbsp; K/D: <b style="color:#ff8">${kd}</b>`;
         overlay.appendChild(myBox);
     }
 
@@ -252,21 +252,21 @@ export async function mostraSchermataStats(parentContainer) {
     table.style.cssText = `width:min(90vw,${Math.round(480*scaleUI)}px);
         background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12);
         border-radius:10px; overflow:hidden; font-size:${Math.round(14*scaleUI)}px;`;
-    table.innerHTML = `<div style="padding:16px;text-align:center;color:rgba(255,255,255,0.5)">Caricamento...</div>`;
+    table.innerHTML = `<div style="padding:16px;text-align:center;color:rgba(255,255,255,0.5)">Loading...</div>`;
 
     // Riga pulsanti: AGGIORNA + INDIETRO
     const btnRow = document.createElement("div");
     btnRow.style.cssText = `display:flex; gap:${Math.round(10*scaleUI)}px; margin-top:${Math.round(20*scaleUI)}px;`;
 
     const refreshBtn = document.createElement("button");
-    refreshBtn.textContent = "↻ AGGIORNA";
+    refreshBtn.textContent = "↻ REFRESH";
     refreshBtn.style.cssText = `padding:${Math.round(10*scaleUI)}px ${Math.round(20*scaleUI)}px;
         background:rgba(0,255,100,0.1); color:rgb(0,255,100);
         font-size:${Math.round(14*scaleUI)}px; font-family:monospace;
         border:1px solid rgba(0,255,100,0.3); border-radius:6px; cursor:pointer;`;
 
     const backBtn = document.createElement("button");
-    backBtn.textContent = "← INDIETRO";
+    backBtn.textContent = "← BACK";
     backBtn.style.cssText = `padding:${Math.round(10*scaleUI)}px ${Math.round(28*scaleUI)}px;
         background:transparent; color:rgba(255,255,255,0.6);
         font-size:${Math.round(14*scaleUI)}px; font-family:monospace;
@@ -285,14 +285,14 @@ export async function mostraSchermataStats(parentContainer) {
     document.body.appendChild(overlay);
 
     async function caricaClassifica() {
-        table.innerHTML = `<div style="padding:16px;text-align:center;color:rgba(255,255,255,0.5)">Caricamento...</div>`;
+        table.innerHTML = `<div style="padding:16px;text-align:center;color:rgba(255,255,255,0.5)">Loading...</div>`;
         refreshBtn.disabled = true;
         try {
             const res  = await fetch("/php/classifica.php");
             const data = await res.json();
 
             if (!data.ok || !data.classifica.length) {
-                table.innerHTML = `<div style="padding:20px;text-align:center;color:rgba(255,255,255,0.4)">Nessun dato disponibile.</div>`;
+                table.innerHTML = `<div style="padding:20px;text-align:center;color:rgba(255,255,255,0.4)">No data available.</div>`;
                 return;
             }
 
@@ -304,7 +304,7 @@ export async function mostraSchermataStats(parentContainer) {
                 background:rgba(0,255,100,0.08);color:rgb(0,255,100);font-size:${fs}px;
                 border-bottom:1px solid rgba(255,255,255,0.08)">
                 <span>#</span><span>Username</span>
-                <span>Kills</span><span>Morti</span><span>Partite</span><span>Lv.</span>
+                <span>Kills</span><span>Deaths</span><span>Games</span><span>Lv.</span>
             </div>`;
 
             data.classifica.forEach((p, i) => {
@@ -323,7 +323,7 @@ export async function mostraSchermataStats(parentContainer) {
 
             table.innerHTML = html;
         } catch (e) {
-            table.innerHTML = `<div style="padding:20px;text-align:center;color:rgb(220,80,80)">Errore nel caricamento.</div>`;
+            table.innerHTML = `<div style="padding:20px;text-align:center;color:rgb(220,80,80)">Failed to load.</div>`;
         } finally {
             refreshBtn.disabled = false;
         }
