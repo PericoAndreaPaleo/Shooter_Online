@@ -659,17 +659,27 @@ function createLobby(lobbyId, lobbyName, password) {
                 usedNicknames.delete(socket.nickname);
             }
 
-            // Salva statistiche nel DB se il giocatore era loggato
+            // Salva statistiche nel DB se il giocatore era loggato.
+            // Ritenta una volta in caso di errore di rete (es. cold start Render).
             if (socket.authToken && leaderboardEntry) {
-                fetch(`${PHP_BASE}/salva_statistiche.php`, {
-                    method: "POST",
+                const salvaPayload = JSON.stringify({
+                    token: socket.authToken,
+                    kills: leaderboardEntry.kills  || 0,
+                    morti: leaderboardEntry.deaths || 0,
+                });
+                const salvaOpts = {
+                    method:  "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        token: socket.authToken,
-                        kills: leaderboardEntry.kills  || 0,
-                        morti: leaderboardEntry.deaths || 0,
-                    }),
-                }).catch(() => {}); // ignora errori di rete
+                    body:    salvaPayload,
+                };
+                fetch(`${PHP_BASE}/salva_statistiche.php`, salvaOpts)
+                    .catch(() => {
+                        // Primo tentativo fallito: riprova dopo 3 secondi
+                        setTimeout(() => {
+                            fetch(`${PHP_BASE}/salva_statistiche.php`, salvaOpts)
+                                .catch(() => {}); // se fallisce di nuovo, rinunciamo
+                        }, 3000);
+                    });
             }
 
             // Rimuove il player dalla lobby

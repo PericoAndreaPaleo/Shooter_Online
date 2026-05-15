@@ -456,3 +456,38 @@ initAuth(avvioGioco);
     }
 })();
 // ─────────────────────────────────────────────────────────────
+// ============================================================
+// SALVATAGGIO STATISTICHE GARANTITO ALLA CHIUSURA
+//
+// `pagehide` è l'unico evento affidabile su tutti i browser
+// (Chrome, Safari mobile, Firefox) anche quando si chiude
+// la tab o la finestra senza fare logout.
+// `sendBeacon` invia la richiesta POST in background anche
+// dopo che il documento è stato scaricato — non viene
+// annullata come farebbe un normale fetch().
+// ============================================================
+window.addEventListener("pagehide", () => {
+    const token  = localStorage.getItem("auth_token");
+    const kills  = state.myKills  || 0;
+    const deaths = state.myDeaths || 0;
+
+    // Invia solo se loggato e ha giocato almeno una partita
+    if (!token || (kills === 0 && deaths === 0)) return;
+
+    const payload = JSON.stringify({ token, kills, morti: deaths });
+    const url     = "/php/salva_statistiche.php";
+
+    // sendBeacon è garantito anche su chiusura tab (fetch non lo è)
+    if (navigator.sendBeacon) {
+        const blob = new Blob([payload], { type: "application/json" });
+        navigator.sendBeacon(url, blob);
+    } else {
+        // Fallback per browser molto vecchi
+        fetch(url, {
+            method:     "POST",
+            headers:    { "Content-Type": "application/json" },
+            body:       payload,
+            keepalive:  true,   // permette al fetch di completare dopo unload
+        }).catch(() => {});
+    }
+});
