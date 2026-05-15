@@ -1,16 +1,15 @@
 <?php
 // ============================================================
-// salva_statistiche.php — Incrementa il contatore partite nel DB
+// aggiorna_stats.php — Aggiornamento DELTA kills/morti in tempo reale
 //
-// Chiamato dal server Node.js alla disconnessione del giocatore.
-// Riceve via POST JSON: token
+// Chiamato dal server Node.js a ogni kill e a ogni morte.
+// Riceve via POST JSON: token, kills (delta 0 o 1), morti (delta 0 o 1)
 //
-// Kills e morti vengono aggiornati in tempo reale tramite
-// aggiorna_stats.php a ogni evento; qui si registra solo
-// il completamento della partita (+1 partita, +2 XP).
+// NON incrementa "partite" — quello viene gestito da salva_statistiche.php
+// alla fine della sessione.
 //
 // Usa FOR UPDATE per scrittura esclusiva — evita race condition
-// se due disconnessioni dello stesso utente arrivano contemporaneamente.
+// se due eventi arrivano contemporaneamente per lo stesso utente.
 // ============================================================
 
 require_once 'db.php';
@@ -23,6 +22,8 @@ header('Content-Type: application/json');
 
 $data  = json_decode(file_get_contents('php://input'), true);
 $token = trim($data['token'] ?? '');
+$kills = intval($data['kills'] ?? 0);
+$morti = intval($data['morti'] ?? 0);
 
 if (!$token) {
     http_response_code(400);
@@ -30,10 +31,17 @@ if (!$token) {
     exit;
 }
 
+// Sanity check: accetta solo delta piccoli (max 1 per evento)
+if ($kills < 0 || $kills > 1 || $morti < 0 || $morti > 1 || ($kills === 0 && $morti === 0)) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Invalid delta values.']);
+    exit;
+}
+
 try {
     $pdo = getDB();
 
-    // Trova l'utente dal token
+    // Verifica token valido
     $stmt = $pdo->prepare('
         SELECT utente_id FROM sessioni
         WHERE token = ? AND scade_il > NOW()
@@ -49,11 +57,11 @@ try {
 
     $utenteId = $row['utente_id'];
 
-    // FOR UPDATE — blocco esclusivo sulla riga durante l'aggiornamento.
+    // Transazione con blocco esclusivo per evitare race condition
     $pdo->beginTransaction();
 
     $stmt = $pdo->prepare('
-        SELECT xp, livello
+        SELECT kills_totali, morti_totali, xp, livello
         FROM statistiche_giocatore
         WHERE utente_id = ?
         FOR UPDATE
@@ -61,20 +69,28 @@ try {
     $stmt->execute([$utenteId]);
     $stats = $stmt->fetch();
 
-    // +1 partita completata, +2 XP per partecipazione
-    $nuovoXp      = ($stats['xp'] ?? 0) + 2;
+    // Applica il delta
+    $nuoveKills = ($stats['kills_totali'] ?? 0) + $kills;
+    $nuoveMorti = ($stats['morti_totali'] ?? 0) + $morti;
+
+    // XP: 10 per kill (morti non danno XP)
+    $nuovoXp      = ($stats['xp'] ?? 0) + ($kills * 10);
     $nuovoLivello = max(1, intdiv($nuovoXp, 100) + 1);
 
     $stmt = $pdo->prepare('
         UPDATE statistiche_giocatore
-        SET partite = partite + 1, xp = ?, livello = ?
+        SET kills_totali = ?, morti_totali = ?, xp = ?, livello = ?
         WHERE utente_id = ?
     ');
-    $stmt->execute([$nuovoXp, $nuovoLivello, $utenteId]);
+    $stmt->execute([$nuoveKills, $nuoveMorti, $nuovoXp, $nuovoLivello, $utenteId]);
 
     $pdo->commit();
 
-    echo json_encode(['ok' => true, 'xp' => $nuovoXp, 'livello' => $nuovoLivello]);
+    echo json_encode([
+        'ok'      => true,
+        'xp'      => $nuovoXp,
+        'livello' => $nuovoLivello,
+    ]);
 
 } catch (Exception $e) {
     if ($pdo->inTransaction()) $pdo->rollBack();

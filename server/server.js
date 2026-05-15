@@ -19,6 +19,19 @@ const crypto  = require("crypto");
 // URL base dei PHP (stesso servizio Docker, Apache su porta 8080)
 const PHP_BASE = "http://127.0.0.1:8080";
 
+// ── Helper: salva un delta di kill/morti in tempo reale ────────────────
+// Chiamato subito dopo ogni kill o morte durante la partita.
+// authToken: token PHP del giocatore (null se non loggato → no-op)
+// killsDelta: 0 o 1   mortiDelta: 0 o 1
+function salvaDelta(authToken, killsDelta, mortiDelta) {
+    if (!authToken) return;
+    fetch(`${PHP_BASE}/aggiorna_stats.php`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ token: authToken, kills: killsDelta, morti: mortiDelta }),
+    }).catch(() => {}); // errori di rete: ignora silenziosamente
+}
+
 
 const app    = express();
 const server = http.createServer(app);
@@ -425,6 +438,7 @@ function createLobby(lobbyId, lobbyName, password) {
                 hp:         PLAYER_MAX_HP,
                 isDead:     true,              // parte morto finché non fa "spawn"
                 nickname,
+                authToken:  socket.authToken || null, // token PHP per stats real-time
                 lastShotTime: 0,
                 hitFlash:   false,             // lampeggio quando colpito
                 lastHitTime: 0,
@@ -603,6 +617,9 @@ function createLobby(lobbyId, lobbyName, password) {
                         target.dir    = { x: 0, y: 0 };
                         if (lobby.leaderboard[targetId])  lobby.leaderboard[targetId].deaths++;
                         if (lobby.leaderboard[socket.id]) lobby.leaderboard[socket.id].kills++;
+                        // Salva delta in tempo reale
+                        salvaDelta(socket.authToken, 1, 0);               // +1 kill al killer
+                        salvaDelta(target.authToken,  0, 1);               // +1 morte alla vittima
                         lobby.namespace.to(socket.id).emit("killConfirm", { victim: target.nickname });
                     }
                 }
@@ -658,16 +675,15 @@ function createLobby(lobbyId, lobbyName, password) {
                 usedNicknames.delete(socket.nickname);
             }
 
-            // Salva statistiche nel DB se il giocatore era loggato
-            if (socket.authToken && leaderboardEntry) {
+            // Registra il completamento della partita nel DB (+1 partita, +2 XP).
+            // Kills e morti sono già stati salvati in tempo reale da salvaDelta()
+            // a ogni evento, quindi NON vanno rimandati qui (evita double-counting
+            // in caso di rejoin seguito da disconnessione).
+            if (socket.authToken) {
                 fetch(`${PHP_BASE}/salva_statistiche.php`, {
-                    method: "POST",
+                    method:  "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        token: socket.authToken,
-                        kills: leaderboardEntry.kills  || 0,
-                        morti: leaderboardEntry.deaths || 0,
-                    }),
+                    body:    JSON.stringify({ token: socket.authToken }),
                 }).catch(() => {}); // ignora errori di rete
             }
 
@@ -878,6 +894,10 @@ setInterval(() => {
                         target.dir    = { x: 0, y: 0 };
                         if (lobby.leaderboard[targetId])    lobby.leaderboard[targetId].deaths++;
                         if (lobby.leaderboard[bullet.ownerId]) lobby.leaderboard[bullet.ownerId].kills++;
+                        // Salva delta in tempo reale
+                        const killer = lobby.players[bullet.ownerId];
+                        salvaDelta(killer ? killer.authToken : null, 1, 0); // +1 kill
+                        salvaDelta(target.authToken, 0, 1);                 // +1 morte
                         lobby.namespace.to(bullet.ownerId).emit("killConfirm", { victim: target.nickname });
                     }
                     break; // un proiettile colpisce al massimo un giocatore
