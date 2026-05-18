@@ -61,6 +61,11 @@ let escAnimFrame     = null;          // requestAnimationFrame (non usato, mante
 let escPressedAt     = null;          // timestamp di quando ESC è stato premuto
 let escProgressBar   = null;          // oggetto Kaboom della barra
 
+/** Flag: il giocatore ha fatto selfKill volontario (ESC hold / autokill).
+ *  Quando è true, la prossima morte rilevata nel snapshot NON viene
+ *  contata nel DB né nel contatore locale. */
+let selfKillPending  = false;
+
 /** Crea la barra visiva di progresso per l'hold ESC */
 function createEscProgressBar() {
     removeEscProgressBar();
@@ -142,7 +147,10 @@ export function registraInputTastiera() {
             // Dopo 1.5s: suicidio volontario → torna al menu
             escHoldTimer = setTimeout(() => {
                 cancelEscHold();
-                if (state.socket) state.socket.emit("selfKill");
+                if (state.socket) {
+                    selfKillPending = true;  // segnala: questa morte NON va contata
+                    state.socket.emit("selfKill");
+                }
             }, ESC_HOLD_DURATION_MS);
         }
 
@@ -566,13 +574,21 @@ export function aggiornaStato(serverSnapshot, canvas) {
             !state.inMenu) {
 
             state.players[playerId]._morteContata = true;
-            // AJAX immediato: +1 morte nel DB
-            if (aggiornaStat) aggiornaStat("morte");
-            state.myDeaths++;
-            state.accountMorti++;
-            aggiornaHUDStats();
+
+            if (selfKillPending) {
+                // Morte volontaria (selfKill / autokill): NON contare nel DB né nei contatori
+                selfKillPending = false;
+                aggiornaHUDStats();
+                showSpawnMenu("Respawn");
+            } else {
+                // Morte reale: +1 morte nel DB e nei contatori locali
+                if (aggiornaStat) aggiornaStat("morte");
+                state.myDeaths++;
+                state.accountMorti++;
+                aggiornaHUDStats();
+                showSpawnMenu("You were eliminated!");
+            }
             playDeathSound();
-            showSpawnMenu("You were eliminated!");
         }
 
         // Reset del flag quando il giocatore torna vivo

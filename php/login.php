@@ -76,14 +76,14 @@ try {
     setcookie('auth_username', $username, time() + (7 * 24 * 3600), '/', '', true, true);
 
     echo json_encode([
-        'ok'       => true,
-        'token'    => $token,
-        'userId'   => $user['id'],
-        'username' => $username,
-        'livello'  => $stats['livello']      ?? 1,
-        'xp'       => $stats['xp']           ?? 0,
-        'kills'    => $stats['kills_totali'] ?? 0,
-        'morti'    => $stats['morti_totali'] ?? 0,
+        'ok'           => true,
+        'token'        => $token,
+        'userId'       => $user['id'],
+        'username'     => $username,
+        'livello'      => $stats['livello']      ?? 1,
+        'xp'           => $stats['xp']           ?? 0,
+        'kills_totali' => $stats['kills_totali'] ?? 0,
+        'morti_totali' => $stats['morti_totali'] ?? 0,
     ]);
 
 } catch (Exception $e) {

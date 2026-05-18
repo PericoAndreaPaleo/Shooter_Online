@@ -107,7 +107,11 @@ export function mostraMenu(subtitleMessage) {
         const d  = state.accountMorti   || 0;
         const lv = state.accountLivello || 1;
         const xp = state.accountXp      || 0;
-        const kd = d > 0 ? (k / d).toFixed(2) : k.toFixed(2);
+        const kd = d > 0 ? (k / d).toFixed(2) : k > 0 ? k.toFixed(2) : "—";
+
+        // kills/morti della sessione di gioco corrente
+        const sk = state.myKills  || 0;
+        const sd = state.myDeaths || 0;
 
         const statsBox = document.createElement("div");
         statsBox.style.cssText = `
@@ -121,7 +125,9 @@ export function mostraMenu(subtitleMessage) {
         statsBox.innerHTML = `
             <span style="color:rgb(0,200,255);font-size:${Math.round(15*scaleUI)}px">${state.accountUsername}</span><br>
             Lv.${lv} &nbsp;·&nbsp; ${xp} XP<br>
+            <span style="color:rgba(255,255,255,0.45);font-size:${Math.round(11*scaleUI)}px">TOTALE</span><br>
             K: ${k} &nbsp; D: ${d} &nbsp; K/D: ${kd}
+            ${(sk > 0 || sd > 0) ? `<br><span style="color:rgba(255,255,255,0.45);font-size:${Math.round(11*scaleUI)}px">QUESTA PARTITA</span><br>K: ${sk} &nbsp; D: ${sd}` : ""}
         `;
         container.appendChild(statsBox);
     }

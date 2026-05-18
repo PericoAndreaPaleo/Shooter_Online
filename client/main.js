@@ -350,11 +350,13 @@ function connectToLobbyNamespace(lobbyId, lobbyName, savedToken) {
 
     // ── Conferma di kill: ho eliminato un avversario ───────────────
     state.socket.on("killConfirm", ({ victim }) => {
-        // AJAX immediato: +1 kill nel DB
+        // AJAX immediato: +1 kill nel DB (unica fonte di verità)
         aggiornaStat("kill");
-        // Aggiorna contatori locali per HUD (ottimistic update)
+        // Aggiorna contatori locali di sessione e account
         state.myKills++;
         state.accountKills++;
+        // XP e livello: incremento locale ottimistico (+10 XP per kill)
+        // I valori reali vengono risincronizzati al prossimo login/checkSession.
         state.accountXp += 10;
         state.accountLivello = Math.max(1, Math.floor(state.accountXp / 100) + 1);
         aggiornaHUDStats();
@@ -464,10 +466,11 @@ function avvioGioco(userData) {
     // userData è null per gli ospiti, oppure { username, livello, xp, ... }
     if (userData) {
         state.accountUsername = userData.username;
-        state.accountLivello  = userData.livello        || 1;
-        state.accountXp       = userData.xp             || 0;
-        state.accountKills    = userData.kills          || userData.kills_totali || 0;
-        state.accountMorti    = userData.morti          || userData.morti_totali || 0;
+        state.accountLivello  = userData.livello      || 1;
+        state.accountXp       = userData.xp           || 0;
+        // Entrambi login.php e check_session.php usano kills_totali / morti_totali
+        state.accountKills    = userData.kills_totali || 0;
+        state.accountMorti    = userData.morti_totali || 0;
     }
     // ─────────────────────────────────────────────────────────────
 
