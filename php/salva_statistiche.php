@@ -1,16 +1,16 @@
 <?php
 // ============================================================
-// salva_statistiche.php — Incrementa il contatore partite nel DB
+// salva_statistiche.php  —  +1 partita al primo spawn della sessione
 //
-// Chiamato dal server Node.js alla disconnessione del giocatore.
-// Riceve via POST JSON: token
+// Chiamato dal server Node.js una sola volta per sessione,
+// quando il giocatore fa il primo spawn (flag socket.partitaContata).
+// Riceve via POST JSON: { token }
 //
-// Kills e morti vengono aggiornati in tempo reale tramite
-// aggiorna_stats.php a ogni evento; qui si registra solo
-// il completamento della partita (+1 partita, +2 XP).
+// Kills, morti e XP da kills vengono aggiornati in tempo reale
+// da aggiorna_stats.php — qui si gestisce SOLO partite + 2 XP
+// per la partecipazione.
 //
-// Usa FOR UPDATE per scrittura esclusiva — evita race condition
-// se due disconnessioni dello stesso utente arrivano contemporaneamente.
+// Usa un singolo UPDATE atomico — nessuna transazione necessaria.
 // ============================================================
 
 require_once 'db.php';
@@ -33,51 +33,36 @@ if (!$token) {
 try {
     $pdo = getDB();
 
-    // Trova l'utente dal token
+    // Trova utente dal token
     $stmt = $pdo->prepare('
         SELECT utente_id FROM sessioni
         WHERE token = ? AND scade_il > NOW()
+        LIMIT 1
     ');
     $stmt->execute([$token]);
     $row = $stmt->fetch();
 
     if (!$row) {
         http_response_code(401);
-        echo json_encode(['error' => 'Invalid token.']);
+        echo json_encode(['error' => 'Token non valido o scaduto.']);
         exit;
     }
 
     $utenteId = $row['utente_id'];
 
-    // FOR UPDATE — blocco esclusivo sulla riga durante l'aggiornamento.
-    $pdo->beginTransaction();
-
-    $stmt = $pdo->prepare('
-        SELECT xp, livello
-        FROM statistiche_giocatore
-        WHERE utente_id = ?
-        FOR UPDATE
-    ');
-    $stmt->execute([$utenteId]);
-    $stats = $stmt->fetch();
-
-    // +1 partita completata, +2 XP per partecipazione
-    $nuovoXp      = ($stats['xp'] ?? 0) + 2;
-    $nuovoLivello = max(1, intdiv($nuovoXp, 100) + 1);
-
+    // Singolo UPDATE atomico: +1 partita, +2 XP, ricalcola livello inline.
     $stmt = $pdo->prepare('
         UPDATE statistiche_giocatore
-        SET partite = partite + 1, xp = ?, livello = ?
+        SET partite = partite + 1,
+            xp      = xp + 2,
+            livello = GREATEST(1, FLOOR((xp + 2) / 100) + 1)
         WHERE utente_id = ?
     ');
-    $stmt->execute([$nuovoXp, $nuovoLivello, $utenteId]);
+    $stmt->execute([$utenteId]);
 
-    $pdo->commit();
-
-    echo json_encode(['ok' => true, 'xp' => $nuovoXp, 'livello' => $nuovoLivello]);
+    echo json_encode(['ok' => true]);
 
 } catch (Exception $e) {
-    if ($pdo->inTransaction()) $pdo->rollBack();
     http_response_code(500);
     echo json_encode(['error' => 'Errore server: ' . $e->getMessage()]);
 }
