@@ -3,7 +3,7 @@
 // ============================================================
 
 import { state, GAME_W, GAME_H, hx, hy, hs, calcolaLetterbox } from "./state.js";
-import { salvaStat } from "./main.js";
+import { salvaStat, registraPartita, resetPartitaFlag } from "./main.js";
 
 // ── Dipendenze iniettate da main.js ──────────────────────────────
 let uiElementsArray      = null;
@@ -139,6 +139,10 @@ export function mostraMenu(subtitleMessage) {
     playButton.addEventListener("click", () => {
         hideHTMLOverlay();
         destroyAllUI();
+        // AJAX: registra +1 partita al primo PLAY della sessione.
+        // registraPartita() usa un flag interno per non contarla
+        // più volte se il giocatore fa selfKill e respawna.
+        registraPartita();
         state.socket.emit("spawn");
     });
     container.appendChild(playButton);
@@ -149,7 +153,9 @@ export function mostraMenu(subtitleMessage) {
 
     const lobbyBtn = creaBtn("← LOBBY", "rgba(255,255,255,0.5)");
     lobbyBtn.addEventListener("click", () => {
-        // Salva kills/morti PRIMA di azzerare i contatori e disconnettersi
+        // Resetta il flag partita così la prossima sessione conta correttamente.
+        // salvaStat() è ora no-op (tutto già salvato in tempo reale).
+        resetPartitaFlag();
         salvaStat();
 
         localStorage.removeItem("lobbyId");

@@ -24,16 +24,20 @@ import { triggerPunch } from "./weapons.js";
 let destroyAllUI = null;
 /** Funzione che mostra il menu di spawn */
 let showSpawnMenu = null;
+/** Funzione AJAX per salvare +1 morte nel DB in tempo reale */
+let aggiornaStat = null;
 
 /**
  * Inizializza il modulo game con le dipendenze che non possono
  * essere importate direttamente (evitare dipendenze circolari).
- * @param {function} distruggiUI - Funzione di cleanup UI
- * @param {function} mostraMenu  - Funzione per mostrare il menu spawn
+ * @param {function} distruggiUI    - Funzione di cleanup UI
+ * @param {function} mostraMenu     - Funzione per mostrare il menu spawn
+ * @param {function} _aggiornaStat  - AJAX +1 kill|morte nel DB
  */
-export function initGame(distruggiUI, mostraMenu) {
-    destroyAllUI = distruggiUI;
+export function initGame(distruggiUI, mostraMenu, _aggiornaStat) {
+    destroyAllUI  = distruggiUI;
     showSpawnMenu = mostraMenu;
+    aggiornaStat  = _aggiornaStat;
 }
 
 // ============================================================
@@ -562,6 +566,8 @@ export function aggiornaStato(serverSnapshot, canvas) {
             !state.inMenu) {
 
             state.players[playerId]._morteContata = true;
+            // AJAX immediato: +1 morte nel DB
+            if (aggiornaStat) aggiornaStat("morte");
             state.myDeaths++;
             state.accountMorti++;
             aggiornaHUDStats();

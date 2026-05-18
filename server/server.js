@@ -19,25 +19,9 @@ const crypto  = require("crypto");
 // URL base dei PHP (stesso servizio Docker, Apache su porta 8080)
 const PHP_BASE = "http://127.0.0.1:8080";
 
-// ── Helper: salva esattamente +1 kill OPPURE +1 morte nel DB via AJAX ───
-// Regole ferree:
-//   • tipo deve essere "kill" o "morte" — no altro
-//   • authToken null/undefined → no-op (giocatore non loggato)
-//   • ogni chiamata invia UN SOLO delta (kills:1,morti:0 o kills:0,morti:1)
-// Il server PHP usa un UPDATE atomico quindi non ci sono race condition.
-function salvaDelta(authToken, tipo) {
-    if (!authToken) return;
-    if (tipo !== "kill" && tipo !== "morte") return; // guard extra
-    fetch(`${PHP_BASE}/aggiorna_stats.php`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({
-            token: authToken,
-            kills: tipo === "kill"  ? 1 : 0,
-            morti: tipo === "morte" ? 1 : 0,
-        }),
-    }).catch(() => {}); // errori di rete: ignora silenziosamente
-}
+// Le statistiche (kills, morti, partite) vengono salvate nel DB
+// direttamente dal client browser via AJAX (aggiorna_stats.php e
+// salva_statistiche.php). Il server non chiama più PHP.
 
 
 const app    = express();
@@ -429,8 +413,6 @@ function createLobby(lobbyId, lobbyName, password) {
                 nickname = (data && data.username) ? data.username : generateNickname();
             }
 
-            // Salva token di autenticazione PHP (per aggiornare statistiche alla disconnessione)
-            socket.authToken = (data && data.authToken) || null;
 
             // Assegna token al socket per il futuro rejoin
             const newToken = crypto.randomBytes(16).toString("hex");
@@ -445,7 +427,6 @@ function createLobby(lobbyId, lobbyName, password) {
                 hp:         PLAYER_MAX_HP,
                 isDead:     true,              // parte morto finché non fa "spawn"
                 nickname,
-                authToken:  socket.authToken || null, // token PHP per stats real-time
                 lastShotTime: 0,
                 hitFlash:   false,             // lampeggio quando colpito
                 lastHitTime: 0,
@@ -485,17 +466,7 @@ function createLobby(lobbyId, lobbyName, password) {
             player.angle  = 0;
             player.ammo   = { gun: MAX_AMMO.gun, pistol: MAX_AMMO.pistol };
 
-            // Al PRIMO spawn della sessione registra la partita nel DB in tempo reale.
-            // Usa il flag socket.partitaContata per evitare di contarla più volte
-            // se il giocatore usa selfKill + respawn durante la stessa sessione.
-            if (socket.authToken && !socket.partitaContata) {
-                socket.partitaContata = true;
-                fetch(`${PHP_BASE}/salva_statistiche.php`, {
-                    method:  "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body:    JSON.stringify({ token: socket.authToken }),
-                }).catch(() => {});
-            }
+            // La partita e le stats vengono registrate dal client via AJAX.
         });
 
         // ── input ─────────────────────────────────────────────────
@@ -643,8 +614,8 @@ function createLobby(lobbyId, lobbyName, password) {
                         target.dir    = { x: 0, y: 0 };
                         if (lobby.leaderboard[targetId])  lobby.leaderboard[targetId].deaths++;
                         if (lobby.leaderboard[socket.id]) lobby.leaderboard[socket.id].kills++;
-                        salvaDelta(socket.authToken, "kill");  // +1 kill al killer
-                        salvaDelta(target.authToken, "morte"); // +1 morte alla vittima
+                        // +1 kill al killer e +1 morte alla vittima
+                        // vengono inviati via AJAX dal client (killConfirm e morte locale)
                         lobby.namespace.to(socket.id).emit("killConfirm", { victim: target.nickname });
                     }
                     break; // fists: 1 bersaglio per pugno, sempre — il break è
@@ -702,9 +673,8 @@ function createLobby(lobbyId, lobbyName, password) {
                 usedNicknames.delete(socket.nickname);
             }
 
-            // La partita è già stata registrata al primo spawn (socket.partitaContata).
-            // Kills e morti sono già salvati in tempo reale da salvaDelta().
-            // Nessuna chiamata PHP necessaria alla disconnessione.
+            // Kills, morti e partite vengono salvati dal client via AJAX.
+            // Il server non chiama PHP alla disconnessione.
 
             // Rimuove il player dalla lobby
             delete lobby.players[socket.id];
@@ -919,9 +889,7 @@ setInterval(() => {
                         target.dir    = { x: 0, y: 0 };
                         if (lobby.leaderboard[targetId])       lobby.leaderboard[targetId].deaths++;
                         if (lobby.leaderboard[bullet.ownerId]) lobby.leaderboard[bullet.ownerId].kills++;
-                        const killer = lobby.players[bullet.ownerId];
-                        salvaDelta(killer ? killer.authToken : null, "kill");  // +1 kill
-                        salvaDelta(target.authToken, "morte");                 // +1 morte
+                        // +1 kill e +1 morte inviati via AJAX dal client
                         lobby.namespace.to(bullet.ownerId).emit("killConfirm", { victim: target.nickname });
                     }
                     break; // un proiettile colpisce al massimo un giocatore

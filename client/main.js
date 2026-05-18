@@ -90,36 +90,67 @@ import {
 import { playKillSound } from "./audio.js";
 
 // ============================================================
-// SALVATAGGIO STATISTICHE — funzione centralizzata
+// SALVATAGGIO STATISTICHE — AJAX in tempo reale
 //
-// Chiamata in 3 momenti:
-//   1. Bottone "← LOBBY" nel menu spawn
-//   2. Logout
-//   3. pagehide (chiusura tab / finestra / mobile swipe-away)
+// Ogni statistica viene inviata al DB nel momento esatto
+// in cui avviene l'evento, senza aspettare la disconnessione.
 //
-// Usa sendBeacon (garantito anche post-unload) con fallback fetch.
-// Dopo il salvataggio azzera i contatori per non salvare doppio.
+// aggiornaStat("kill")  → chiamata su killConfirm  → +1 kill nel DB
+// aggiornaStat("morte") → chiamata su morte locale → +1 morte nel DB
+// registraPartita()     → chiamata al primo PLAY   → +1 partita nel DB
+//
+// La funzione è esportata perché usata anche da game.js (morte).
 // ============================================================
-export function salvaStat() {
-    const token  = localStorage.getItem("auth_token");
-    const kills  = state.myKills  || 0;
-    const morti  = state.myDeaths || 0;
 
-    if (!token || (kills === 0 && morti === 0)) return;
+/** Flag: la partita è già stata registrata in questa sessione? */
+let partitaRegistrata = false;
 
-    const payload = JSON.stringify({ token, kills, morti });
-    const url     = "/php/salva_statistiche.php";
-
-    if (navigator.sendBeacon) {
-        navigator.sendBeacon(url, new Blob([payload], { type: "application/json" }));
-    } else {
-        fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: payload, keepalive: true }).catch(() => {});
-    }
-
-    // Azzera i contatori di sessione così non salviamo doppio
-    state.myKills  = 0;
-    state.myDeaths = 0;
+/**
+ * Invia al DB esattamente +1 kill OPPURE +1 morte via AJAX.
+ * tipo: "kill" | "morte"
+ * No-op se l'utente non è loggato.
+ */
+export function aggiornaStat(tipo) {
+    const token = localStorage.getItem("auth_token");
+    if (!token) return;
+    fetch("/php/aggiorna_stats.php", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+            token,
+            kills: tipo === "kill"  ? 1 : 0,
+            morti: tipo === "morte" ? 1 : 0,
+        }),
+    }).catch(() => {});
 }
+
+/**
+ * Registra +1 partita nel DB al primo PLAY della sessione.
+ * Usa il flag partitaRegistrata per non contarla più volte
+ * anche se il giocatore fa selfKill + rispawn più volte.
+ */
+export function registraPartita() {
+    const token = localStorage.getItem("auth_token");
+    if (!token || partitaRegistrata) return;
+    partitaRegistrata = true;
+    fetch("/php/salva_statistiche.php", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ token }),
+    }).catch(() => {});
+}
+
+/**
+ * Resetta il flag partita (chiamato quando si torna in lobby,
+ * così una nuova sessione di gioco conta come nuova partita).
+ */
+export function resetPartitaFlag() {
+    partitaRegistrata = false;
+}
+
+/** Mantenuta per compatibilità con pagehide — ora è no-op perché
+ *  tutto è già stato salvato in tempo reale. */
+export function salvaStat() {}
 
 // ── AGGIUNTA: import modulo autenticazione ───────────────────
 // checkSession        → verifica se l'utente ha già un cookie valido
@@ -319,8 +350,10 @@ function connectToLobbyNamespace(lobbyId, lobbyName, savedToken) {
 
     // ── Conferma di kill: ho eliminato un avversario ───────────────
     state.socket.on("killConfirm", ({ victim }) => {
+        // AJAX immediato: +1 kill nel DB
+        aggiornaStat("kill");
+        // Aggiorna contatori locali per HUD (ottimistic update)
         state.myKills++;
-        // Aggiorna anche le stat account per riflettere la sessione corrente
         state.accountKills++;
         state.accountXp += 10;
         state.accountLivello = Math.max(1, Math.floor(state.accountXp / 100) + 1);
@@ -388,7 +421,7 @@ function goToLobby() {
 
 initMenu(uiLayer, removeActiveHTMLContainer, destroyAllUI, setActiveHTMLContainer, apriAuth, logout, goToLobby);
 initLobby(uiLayer, destroyAllUI, removeActiveHTMLContainer, setActiveHTMLContainer, connectToLobbyNamespace, apriAuth, logout, mostraSchermataStats);
-initGame(destroyAllUI, mostraMenu);
+initGame(destroyAllUI, mostraMenu, aggiornaStat);
 
 // Callback per cambiaArma: aggiorna tutti gli elementi HUD dopo un cambio arma
 setWeaponChangeCallback(() => {
