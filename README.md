@@ -2,13 +2,14 @@
 
 **Multiplayer shooter 2D top-down in tempo reale** sviluppato con **Kaboom.js** (client) e **Node.js + Socket.IO** (server).
 
-Gioca in lobby da massimo 8 giocatori con movimento fluido, tre armi distinte, una mappa procedurale con ostacoli e supporto completo per dispositivi mobile.
+Gioca in lobby da massimo 8 giocatori con movimento fluido, tre armi distinte, una mappa procedurale con ostacoli, un sistema di account con statistiche persistenti e supporto completo per dispositivi mobile.
 
 ---
 
 ## Indice
 
 - [Funzionalità](#funzionalità)
+- [Account e statistiche](#account-e-statistiche)
 - [Armi](#armi)
 - [Controlli](#controlli)
 - [Tecnologie](#tecnologie)
@@ -16,14 +17,16 @@ Gioca in lobby da massimo 8 giocatori con movimento fluido, tre armi distinte, u
 - [Avvio rapido](#avvio-rapido)
 - [Deploy su Render](#deploy-su-render)
 - [Architettura](#architettura)
-- [Possibili miglioramenti](#possibili-miglioramenti)
 
 ---
 
 ## Funzionalità
 
 - **Lobby pubbliche e private** — crea o unisciti a una lobby; le lobby private sono protette da password
-- **Rejoin automatico** — se ti disconnetti, hai 5 minuti per rientrare mantenendo nickname e statistiche (kill/death)
+- **Rejoin automatico** — se ti disconnetti, hai 5 minuti per rientrare mantenendo nickname e statistiche di sessione
+- **Sistema di account** — registrazione, login e logout con sessione persistente tramite cookie sicuro (httpOnly)
+- **Statistiche persistenti** — kills, morti, partite, XP e livello salvati in database MySQL in tempo reale
+- **Leaderboard globale** — classifica aggiornata accessibile direttamente dal menu di spawn
 - **Mappa procedurale** — rocce, alberi e cespugli generati con seed casuale ad ogni nuova lobby
 - **Fisica lato server** — movimento, collisioni e validazione degli spari gestiti dal server (anti-cheat di base)
 - **Interpolazione client** — i movimenti vengono interpolati per un'esperienza più fluida anche con latenza
@@ -33,6 +36,36 @@ Gioca in lobby da massimo 8 giocatori con movimento fluido, tre armi distinte, u
 - **Barre nere (letterbox)** — mantenimento automatico del rapporto 16:9 su qualsiasi schermo
 - **Rigenerazione HP** — la vita si rigenera automaticamente dopo 4 secondi senza subire danni
 - **60 tick/secondo** — game loop server ottimizzato per bassa latenza
+
+---
+
+## Account e statistiche
+
+### Registrazione e login
+
+All'avvio il gioco controlla se esiste una sessione attiva (cookie). Se non sei loggato, viene mostrata la schermata di login/registrazione. Puoi anche giocare come **ospite** (nickname casuale, nessuna statistica salvata).
+
+### Statistiche salvate
+
+| Campo | Descrizione |
+|---|---|
+| **Kills** | Numero totale di eliminazioni |
+| **Morti** | Numero totale di volte che sei stato eliminato da un avversario |
+| **Partite** | Numero di sessioni di gioco (conta solo al primo spawn per sessione) |
+| **XP** | Esperienza accumulata (+10 per kill, +2 per partecipazione a una partita) |
+| **Livello** | Calcolato automaticamente: `floor(XP / 100) + 1` |
+
+### Comportamento del conteggio morti
+
+Il **selfKill volontario** (tenere ESC per 1.5 secondi per tornare al menu di spawn) **non conta come morte** né nel database né nei contatori di sessione. Solo le eliminazioni da parte di altri giocatori incrementano il contatore morti.
+
+### Menu di spawn — statistiche mostrate
+
+Il menu di spawn mostra, se sei loggato:
+
+- Username, livello e XP totali
+- **TOTALE**: kills e morti cumulativi dell'account con K/D ratio
+- **QUESTA PARTITA**: kills e morti della sessione corrente (visibile solo dopo il primo kill o la prima morte)
 
 ---
 
@@ -61,7 +94,7 @@ Gioca in lobby da massimo 8 giocatori con movimento fluido, tre armi distinte, u
 | `2` | Seleziona Pistol |
 | `3` | Seleziona Fists |
 | `R` | Ricarica manuale |
-| `ESC` (tieni 1.5s) | Suicidio → ritorno al menu di spawn |
+| `ESC` (tieni 1.5s) | Ritorno al menu di spawn (non conta come morte) |
 
 ### Mobile (Touch)
 
@@ -77,6 +110,7 @@ Gioca in lobby da massimo 8 giocatori con movimento fluido, tre armi distinte, u
 ## Tecnologie
 
 ### Client
+
 | Tecnologia | Utilizzo |
 |---|---|
 | [Kaboom.js](https://kaboomjs.com/) | Motore grafico 2D (rendering, camera, input) |
@@ -86,12 +120,21 @@ Gioca in lobby da massimo 8 giocatori con movimento fluido, tre armi distinte, u
 | ES Modules | Architettura modulare del client |
 
 ### Server
+
 | Tecnologia | Utilizzo |
 |---|---|
 | [Node.js](https://nodejs.org/) | Runtime server-side |
 | [Express](https://expressjs.com/) | Serving dei file statici del client |
 | [Socket.IO](https://socket.io/) (server) | Namespace dedicati per ogni lobby |
 | `crypto` (built-in) | Generazione token di rejoin e ID lobby |
+
+### Backend / Persistenza
+
+| Tecnologia | Utilizzo |
+|---|---|
+| PHP | API REST per autenticazione e statistiche |
+| MySQL | Database utenti, sessioni e statistiche giocatore |
+| nginx | Reverse proxy per routing PHP + Node.js |
 
 ---
 
@@ -101,12 +144,13 @@ Gioca in lobby da massimo 8 giocatori con movimento fluido, tre armi distinte, u
 Shooter_Online/
 ├── client/                     # Tutti i file del frontend
 │   ├── index.html              # Entry HTML (carica main.js come modulo)
-│   ├── main.js                 # Entry point: init Kaboom, socket, moduli
+│   ├── main.js                 # Entry point: init Kaboom, socket, moduli, AJAX stats
 │   ├── state.js                # Stato globale condiviso (unica sorgente di verità)
 │   ├── game.js                 # Input tastiera, logica di sparo, rendering stato
 │   ├── hud.js                  # HUD: HP, munizioni, kill feed, leaderboard, minimappa
 │   ├── lobby.js                # Schermata selezione/creazione lobby
-│   ├── menu.js                 # Menu di spawn (mostrato all'ingresso in una lobby)
+│   ├── menu.js                 # Menu di spawn con statistiche account e leaderboard
+│   ├── auth.js                 # Schermata login/registrazione e gestione sessione
 │   ├── weapons.js              # Rendering armi e animazione pugni
 │   ├── touch.js                # Joystick virtuali e bottoni mobile
 │   ├── audio.js                # Effetti sonori via Web Audio API
@@ -114,8 +158,19 @@ Shooter_Online/
 │       └── kaboom.mjs          # Libreria Kaboom.js (bundled, nessuna CDN richiesta)
 ├── server/
 │   └── server.js               # Server completo: lobby, fisica, game loop
+├── php/
+│   ├── auth.php                # Endpoint autenticazione centralizzato
+│   ├── login.php               # Login utente (restituisce token + stats)
+│   ├── register.php            # Registrazione nuovo account
+│   ├── logout.php              # Invalidazione sessione e cookie
+│   ├── check_session.php       # Verifica sessione attiva al caricamento
+│   ├── aggiorna_stats.php      # +1 kill oppure +1 morte in tempo reale
+│   ├── salva_statistiche.php   # +1 partita al primo spawn della sessione
+│   ├── classifica.php          # Leaderboard globale
+│   └── db.php                  # Connessione PDO al database MySQL
+├── Dockerfile
+├── nginx.conf
 ├── package.json
-├── package-lock.json
 └── README.md
 ```
 
@@ -123,12 +178,13 @@ Shooter_Online/
 
 | Modulo | Responsabilità |
 |---|---|
-| `main.js` | Inizializzazione, connessione socket, injection dipendenze, rejoin automatico |
-| `state.js` | Stato globale (socket, ID, arma, munizioni, input, zoom camera) — nessuna dipendenza |
-| `game.js` | Input WASD, sparo, camera Kaboom, applicazione snapshot server |
-| `hud.js` | Tutti gli elementi overlay: HP, ammo, stats, kill feed, leaderboard, minimappa |
+| `main.js` | Inizializzazione, connessione socket, injection dipendenze, AJAX kills/morti/partite, rejoin automatico |
+| `state.js` | Stato globale (socket, ID, arma, munizioni, input, zoom camera, dati account) — nessuna dipendenza |
+| `game.js` | Input WASD, sparo, camera Kaboom, applicazione snapshot server, gestione selfKill |
+| `hud.js` | Tutti gli elementi overlay: HP, ammo, stats di sessione, kill feed, leaderboard, minimappa |
 | `lobby.js` | UI di selezione/creazione lobby, gestione eventi Socket.IO del menu principale |
-| `menu.js` | Menu di spawn mostrato dopo `init` — prima di entrare in partita |
+| `menu.js` | Menu di spawn con stats account (totale + sessione corrente) e accesso alla leaderboard |
+| `auth.js` | Schermata login/registrazione, checkSession, logout, callback post-autenticazione |
 | `weapons.js` | Disegno grafico di armi e mani (solo rendering, nessuna logica di gioco) |
 | `touch.js` | Joystick sinistro (movimento) e destro (mira/sparo), bottoni arma e ricarica |
 | `audio.js` | Suoni sintetici per sparo, colpo, kill, pugni e morte |
@@ -140,6 +196,8 @@ Shooter_Online/
 ### Prerequisiti
 
 - [Node.js](https://nodejs.org/) v18 o superiore
+- PHP 8.x con PDO MySQL
+- MySQL / MariaDB
 
 ### Installazione
 
@@ -148,9 +206,11 @@ Shooter_Online/
 git clone <url-del-repo>
 cd Shooter_Online
 
-# Installa le dipendenze
+# Installa le dipendenze Node
 npm install
 ```
+
+Configura il database in `php/db.php` con host, nome DB, utente e password, quindi importa lo schema SQL.
 
 ### Avvio
 
@@ -206,7 +266,7 @@ Client                          Server
         ├── shoot        ──────► │  Sparo / attacco melee
         ├── setWeapon    ──────► │  Cambio arma
         ├── reload       ──────► │  Ricarica manuale
-        ├── selfKill     ──────► │  Suicidio volontario (ESC hold)
+        ├── selfKill     ──────► │  Respawn volontario (ESC hold, non conta come morte)
         └── state        ◄────── │  Snapshot completo ~60×/sec
 ```
 
@@ -220,6 +280,15 @@ Ad ogni tick il server:
 5. Muove i **proiettili** e testa le collisioni con ostacoli e giocatori
 6. Emette lo **snapshot di stato** a tutti i client della lobby
 
+### Sistema di statistiche
+
+Le statistiche vengono salvate in tempo reale via AJAX al verificarsi dell'evento, senza attendere la disconnessione:
+
+- `aggiorna_stats.php` → chiamato su ogni kill o morte reale (+1 kill o +1 morte)
+- `salva_statistiche.php` → chiamato al primo spawn della sessione (+1 partita, +2 XP)
+
+Il **selfKill** (ESC hold) non invia nessuna chiamata AJAX: il flag `selfKillPending` sul client intercetta la morte nel snapshot successivo e la scarta silenziosamente.
+
 ### Sistema di rejoin
 
 Alla disconnessione il server salva un token crittografico associato a nickname, kills e deaths. Il token è valido 5 minuti. Se il giocatore si riconnette con lo stesso token (da `localStorage`), recupera la sua sessione precedente senza perdere le statistiche.
@@ -228,20 +297,6 @@ Se la lobby rimane vuota per 5 minuti consecutivi, viene rimossa automaticamente
 
 ---
 
-## Possibili miglioramenti
-
-- [ ] Sistema di power-up (velocità, scudo, munizioni extra)
-- [ ] Mappe multiple con layout diversi
-- [ ] Modalità a squadre (team deathmatch)
-- [ ] Statistiche persistenti (database)
-- [ ] Skin personalizzabili per i giocatori
-- [ ] Chat in-game
-- [ ] Spettatore (spectate mode) dopo la morte
-- [ ] Suoni ambientali procedurali
-
----
-
 ## Licenza
 
-Questo progetto è stato creato per scopi educativi e di divertimento.
-Sentiti libero di modificarlo e migliorarlo.
+Questo progetto è stato creato per scopi educativi e di divertimento. Sentiti libero di modificarlo e migliorarlo.
