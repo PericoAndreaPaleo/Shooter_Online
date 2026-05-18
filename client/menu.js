@@ -325,14 +325,17 @@ export async function mostraSchermataStats(parentContainer) {
             </div>`;
 
             data.classifica.forEach((p, i) => {
-                const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i+1}`;
+                const medalColor = i === 0 ? "rgb(255,210,0)" : i === 1 ? "rgb(200,200,200)" : i === 2 ? "rgb(205,127,50)" : "rgba(255,255,255,0.35)";
+                const medalBg    = i === 0 ? "rgba(255,210,0,0.14)" : i === 1 ? "rgba(200,200,200,0.09)" : i === 2 ? "rgba(205,127,50,0.11)" : "transparent";
+                const medalText  = `#${i+1}`;
                 const isMe  = p.username === state.accountUsername;
-                const col   = isMe ? "rgb(0,220,255)" : i === 0 ? "rgb(255,215,0)" : "rgba(255,255,255,0.85)";
-                const bg    = isMe ? "rgba(0,200,255,0.08)" : i % 2 === 0 ? "rgba(255,255,255,0.03)" : "transparent";
-                const border = isMe ? "border-left:2px solid rgb(0,200,255);" : "";
+                const col   = isMe ? "rgb(0,230,255)" : i === 0 ? "rgb(255,210,0)" : "rgba(255,255,255,0.85)";
+                const bg    = isMe ? "rgba(0,200,255,0.13)" : i % 2 === 0 ? "rgba(255,255,255,0.03)" : "transparent";
+                const border = isMe ? "border-left:3px solid rgb(0,200,255);" : i < 3 ? `border-left:3px solid ${medalColor};` : "border-left:3px solid transparent;";
                 html += `<div style="display:grid;grid-template-columns:${cols};padding:${pad};
                     background:${bg};color:${col};border-bottom:1px solid rgba(255,255,255,0.05);${border}">
-                    <span>${medal}</span><span>${p.username}</span>
+                    <span style="color:${medalColor};background:${medalBg};border-radius:4px;padding:1px 5px;font-weight:bold;text-align:center">${medalText}</span>
+                    <span>${isMe ? `<span style="color:rgb(0,230,255);font-weight:bold">${p.username}</span> <span style="color:rgb(0,230,255);background:rgba(0,200,255,0.18);border:1px solid rgba(0,200,255,0.35);border-radius:3px;padding:0 4px;font-size:0.75em;letter-spacing:1px">YOU</span>` : p.username}</span>
                     <span>${p.kills_totali}</span><span>${p.morti_totali}</span>
                     <span>${p.partite}</span><span>${p.livello}</span>
                 </div>`;

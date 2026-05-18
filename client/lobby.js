@@ -174,7 +174,10 @@ export function mostraSchermataLobby(errorMessage) {
     privateCheckbox.style.cssText = "width: 16px; height: 16px; cursor: pointer; accent-color: #e93;";
 
     privateLabel.appendChild(privateCheckbox);
-    privateLabel.appendChild(document.createTextNode("🔒 Private"));
+    const privateLockSpan = document.createElement("span");
+    privateLockSpan.textContent = "PRIVATE";
+    privateLockSpan.style.cssText = "color:rgb(255,170,50);background:rgba(255,150,0,0.15);border:1px solid rgba(255,150,0,0.35);border-radius:4px;padding:1px 6px;font-size:0.9em;letter-spacing:1px;";
+    privateLabel.appendChild(privateLockSpan);
 
     // Campo password (nascosto finché non si spunta "Privata")
     const passwordInput = document.createElement("input");
@@ -297,7 +300,7 @@ export function mostraSchermataLobby(errorMessage) {
     // Mostra username loggato se presente
     if (state.accountUsername) {
         const userLabel = document.createElement("div");
-        userLabel.textContent = `👤 ${state.accountUsername}  ·  Lv.${state.accountLivello || 1}`;
+        userLabel.textContent = `${state.accountUsername}  ·  Lv.${state.accountLivello || 1}`;
         userLabel.style.cssText = `color:rgba(0,200,255,0.7); font-family:monospace; font-size:${scaledPx(13)}; text-align:center;`;
         container.appendChild(userLabel);
     }
@@ -365,9 +368,13 @@ function renderLobbyListItems(container, lobbyList, uiScale = 1) {
         infoColumn.style.cssText = "display: flex; flex-direction: column; gap: 3px;";
 
         const nameElement = document.createElement("span");
-        nameElement.textContent = (lobby.private ? "🔒 " : "") + (lobby.name || lobby.id);
+        const lobbyDisplayName = lobby.name || lobby.id;
+        const privateBadge = lobby.private
+            ? `<span style="color:rgb(255,170,50);background:rgba(255,150,0,0.15);border:1px solid rgba(255,150,0,0.3);border-radius:3px;padding:0 5px;font-size:0.8em;margin-right:5px;letter-spacing:1px">PRIV</span>`
+            : "";
+        nameElement.innerHTML = privateBadge + lobbyDisplayName;
         nameElement.style.cssText = `
-            color:       ${lobby.private ? "#ffa" : "white"};
+            color:       ${lobby.private ? "#ffd080" : "white"};
             font-family: monospace;
             font-size:   ${scaledPx(16)};
             font-weight: bold;
@@ -550,17 +557,32 @@ export function mostraHowToPlay(parentContainer) {
         display: flex; flex-direction: column; gap: ${sp(14)};
     `;
 
-    // Helper — crea un blocco sezione con titolo + contenuto
+    // section colors map: icon tag -> accent color
+    const sectionColors = {
+        "[>]":   "rgb(0,255,100)",
+        "[KB]":  "rgb(255,220,80)",
+        "[MOB]": "rgb(80,200,255)",
+        "[GUN]": "rgb(255,120,80)",
+        "[HP]":  "rgb(220,60,60)",
+        "[XP]":  "rgb(255,200,0)",
+        "[LBY]": "rgb(100,180,255)",
+        "[!]":   "rgb(180,100,255)",
+    };
+
+    // Helper -- crea un blocco sezione con titolo colorato + contenuto
     function section(icon, heading, contentHTML) {
+        const accentColor = sectionColors[icon] || "rgb(255,200,0)";
         const wrap = document.createElement("div");
         wrap.style.cssText = `
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 10px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.09);
+            border-left: 3px solid ${accentColor};
+            border-radius: 8px;
             padding: ${sp(12)} ${sp(16)};
         `;
         const h = document.createElement("div");
-        h.innerHTML = `${icon} <span style="color:rgb(255,200,0);letter-spacing:2px;font-size:${sp(13)}">${heading}</span>`;
+        h.innerHTML = `<span style="color:${accentColor};font-weight:bold;font-size:${sp(12)};letter-spacing:1px;opacity:0.8">${icon}</span>
+            <span style="color:${accentColor};letter-spacing:2px;font-size:${sp(13)};font-weight:bold"> ${heading}</span>`;
         h.style.cssText = `margin-bottom:${sp(8)}; font-size:${sp(13)};`;
         wrap.appendChild(h);
         const c = document.createElement("div");
@@ -579,14 +601,14 @@ export function mostraHowToPlay(parentContainer) {
     }
 
     // ── GOAL ──────────────────────────────────────────────────────
-    body.appendChild(section("🎯", "GOAL",
+    body.appendChild(section("[>]", "GOAL",
         `Eliminate other players in real-time multiplayer matches.
         Up to <b style="color:#8f8">8 players</b> per lobby.
         There are no rounds — respawn and keep fighting!`
     ));
 
     // ── KEYBOARD CONTROLS ─────────────────────────────────────────
-    body.appendChild(section("⌨️", "KEYBOARD CONTROLS",
+    body.appendChild(section("[KB]", "KEYBOARD CONTROLS",
         row("W A S D", "Move your character") +
         row("Mouse", "Aim in any direction") +
         row("Left Click", "Shoot / punch") +
@@ -598,7 +620,7 @@ export function mostraHowToPlay(parentContainer) {
     ));
 
     // ── MOBILE CONTROLS ──────────────────────────────────────────
-    body.appendChild(section("📱", "MOBILE CONTROLS",
+    body.appendChild(section("[MOB]", "MOBILE CONTROLS",
         row("Left joystick", "Move your character") +
         row("Right joystick", "Aim + auto-fire when active") +
         row("AR / PI / FI buttons", "Switch weapon") +
@@ -606,7 +628,7 @@ export function mostraHowToPlay(parentContainer) {
     ));
 
     // ── WEAPONS ───────────────────────────────────────────────────
-    body.appendChild(section("🔫", "WEAPONS",
+    body.appendChild(section("[GUN]", "WEAPONS",
         `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:${sp(4)} ${sp(6)};margin-top:${sp(4)}">
             <span style="color:rgb(255,200,0)">Weapon</span>
             <span style="color:rgb(255,200,0)">Ammo</span>
@@ -618,19 +640,19 @@ export function mostraHowToPlay(parentContainer) {
             <span>Fists</span><span>∞</span><span style="color:#f88">100 HP</span><span>200ms</span><span>—</span>
         </div>
         <div style="margin-top:${sp(8)};color:rgba(255,255,255,0.55);font-size:${sp(11)}">
-            ⚠️ Fists hit in a 60px cone (±90°) in front of you. One hit kill.
+            NOTE: Fists hit in a 60px cone (±90°) in front of you. One hit kill.
         </div>`
     ));
 
     // ── HP & HEALING ─────────────────────────────────────────────
-    body.appendChild(section("❤️", "HP & HEALING",
+    body.appendChild(section("[HP]", "HP & HEALING",
         `Every player starts with <b style="color:#8f8">100 HP</b>.<br>
         If you take no damage for <b style="color:#ff8">4 seconds</b>, you automatically
         regenerate <b style="color:#8f8">+8 HP per second</b> until full.`
     ));
 
     // ── XP & LEVELS ──────────────────────────────────────────────
-    body.appendChild(section("⭐", "XP & LEVELS",
+    body.appendChild(section("[XP]", "XP & LEVELS",
         row("+10 XP", "per kill", "rgb(255,200,0)") +
         row("+2 XP",  "per match played (first spawn only)", "rgb(255,200,0)") +
         `<div style="margin-top:${sp(6)}">
@@ -642,9 +664,9 @@ export function mostraHowToPlay(parentContainer) {
     ));
 
     // ── LOBBY ─────────────────────────────────────────────────────
-    body.appendChild(section("🏠", "LOBBY",
+    body.appendChild(section("[LBY]", "LOBBY",
         row("Public lobby", "Anyone can join with one click", "rgb(100,200,255)") +
-        row("Private lobby 🔒", "Requires a password to join", "rgb(255,180,80)") +
+        row("Private lobby", "Requires a password to join", "rgb(255,180,80)") +
         `<div style="margin-top:${sp(6)};color:rgba(255,255,255,0.55);font-size:${sp(11)}">
             If you disconnect, you have <b style="color:#ff8">5 minutes</b> to rejoin
             the same lobby and keep your session stats.
@@ -652,7 +674,7 @@ export function mostraHowToPlay(parentContainer) {
     ));
 
     // ── DEATHS & SELFKILL ─────────────────────────────────────────
-    body.appendChild(section("💀", "DEATHS",
+    body.appendChild(section("[!]", "DEATHS",
         `<div>Only deaths caused by <b style="color:#f88">other players</b> count toward your death total.</div>
         <div style="margin-top:${sp(5)}">Using <b style="color:rgb(255,220,80)">ESC (hold)</b> to respawn voluntarily
         does <b style="color:#8f8">NOT</b> add a death to your stats.</div>`
