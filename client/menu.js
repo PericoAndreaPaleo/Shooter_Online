@@ -4,6 +4,7 @@
 
 import { state, GAME_W, GAME_H, hx, hy, hs, calcolaLetterbox } from "./state.js";
 import { salvaStat, registraPartita, resetPartitaFlag } from "./main.js";
+import { mostraHowToPlay } from "./lobby.js";
 
 // ── Dipendenze iniettate da main.js ──────────────────────────────
 let uiElementsArray      = null;
@@ -180,7 +181,11 @@ export function mostraMenu(subtitleMessage) {
     const statsBtn = creaBtn("STATS", "rgba(0,200,255,0.8)");
     statsBtn.addEventListener("click", () => mostraSchermataStats(container));
 
+    const howToPlayBtn = creaBtn("HOW TO PLAY", "rgba(255,200,0,0.85)");
+    howToPlayBtn.addEventListener("click", () => mostraHowToPlay(container));
+
     navRow.appendChild(lobbyBtn);
+    navRow.appendChild(howToPlayBtn);
     navRow.appendChild(statsBtn);
     container.appendChild(navRow);
 

@@ -261,6 +261,10 @@ export function mostraSchermataLobby(errorMessage) {
         return btn;
     }
 
+    const howToPlayBtn = creaBottomBtn("HOW TO PLAY", "rgba(255,200,0,0.85)");
+    howToPlayBtn.addEventListener("click", () => mostraHowToPlay(container));
+    bottomRow.appendChild(howToPlayBtn);
+
     const statsBtn = creaBottomBtn("STATS", "rgba(0,200,255,0.8)");
     statsBtn.addEventListener("click", () => {
         if (_mostraStats) _mostraStats(container);
@@ -500,4 +504,178 @@ export function registraEventiLobby() {
     state.mainSocket.on("lobbyJoinOk", ({ lobbyId, lobbyName }) => {
         connectToLobby(lobbyId, lobbyName, null);
     });
+}
+
+// ============================================================
+// HOW TO PLAY — Tutorial overlay
+// ============================================================
+
+/**
+ * Mostra la schermata tutorial con controlli, armi, XP e regole.
+ * Può essere aperta sia dalla lobby che dal menu di spawn.
+ * @param {HTMLElement|null} parentContainer - Container da ripristinare alla chiusura
+ */
+export function mostraHowToPlay(parentContainer) {
+    if (parentContainer) parentContainer.style.display = "none";
+
+    const uiScale  = Math.min(1, Math.min(window.innerWidth, window.innerHeight * 16 / 9) / 520);
+    const sp       = (n) => `${Math.max(9, Math.round(n * uiScale))}px`;
+
+    // ── Overlay sfondo ─────────────────────────────────────────────
+    const overlay = document.createElement("div");
+    overlay.style.cssText = `
+        position: fixed; inset: 0;
+        background: rgba(5,10,20,0.97);
+        display: flex; flex-direction: column; align-items: center;
+        justify-content: flex-start;
+        padding: ${sp(24)} ${sp(16)} ${sp(24)};
+        z-index: 99999; font-family: monospace; color: white;
+        overflow-y: auto; box-sizing: border-box;
+    `;
+
+    // ── Titolo ─────────────────────────────────────────────────────
+    const title = document.createElement("div");
+    title.textContent = "HOW TO PLAY";
+    title.style.cssText = `
+        font-size: ${sp(28)}; color: rgb(255,200,0);
+        letter-spacing: 4px; margin-bottom: ${sp(18)};
+        text-align: center;
+    `;
+    overlay.appendChild(title);
+
+    // ── Contenuto principale ───────────────────────────────────────
+    const body = document.createElement("div");
+    body.style.cssText = `
+        width: min(92vw, ${Math.round(560 * uiScale)}px);
+        display: flex; flex-direction: column; gap: ${sp(14)};
+    `;
+
+    // Helper — crea un blocco sezione con titolo + contenuto
+    function section(icon, heading, contentHTML) {
+        const wrap = document.createElement("div");
+        wrap.style.cssText = `
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: ${sp(12)} ${sp(16)};
+        `;
+        const h = document.createElement("div");
+        h.innerHTML = `${icon} <span style="color:rgb(255,200,0);letter-spacing:2px;font-size:${sp(13)}">${heading}</span>`;
+        h.style.cssText = `margin-bottom:${sp(8)}; font-size:${sp(13)};`;
+        wrap.appendChild(h);
+        const c = document.createElement("div");
+        c.innerHTML = contentHTML;
+        c.style.cssText = `font-size:${sp(13)}; line-height:1.75; color:rgba(255,255,255,0.82);`;
+        wrap.appendChild(c);
+        return wrap;
+    }
+
+    // Helper — riga tasto → descrizione
+    function row(key, desc, keyColor = "rgb(255,220,80)") {
+        return `<div style="display:flex;align-items:baseline;gap:${sp(8)};margin-bottom:${sp(3)}">
+            <span style="color:${keyColor};min-width:${sp(90)};display:inline-block;font-weight:bold">${key}</span>
+            <span>${desc}</span>
+        </div>`;
+    }
+
+    // ── GOAL ──────────────────────────────────────────────────────
+    body.appendChild(section("🎯", "GOAL",
+        `Eliminate other players in real-time multiplayer matches.
+        Up to <b style="color:#8f8">8 players</b> per lobby.
+        There are no rounds — respawn and keep fighting!`
+    ));
+
+    // ── KEYBOARD CONTROLS ─────────────────────────────────────────
+    body.appendChild(section("⌨️", "KEYBOARD CONTROLS",
+        row("W A S D", "Move your character") +
+        row("Mouse", "Aim in any direction") +
+        row("Left Click", "Shoot / punch") +
+        row("1", "Switch to Rifle (30 ammo)") +
+        row("2", "Switch to Pistol (15 ammo)") +
+        row("3", "Switch to Fists (melee, infinite)") +
+        row("R", "Reload manually") +
+        row("ESC  (hold 1.5s)", "Respawn — return to spawn menu<br><span style=\"color:rgba(255,255,255,0.45);font-size:${sp(11)}\">This does NOT count as a death.</span>")
+    ));
+
+    // ── MOBILE CONTROLS ──────────────────────────────────────────
+    body.appendChild(section("📱", "MOBILE CONTROLS",
+        row("Left joystick", "Move your character") +
+        row("Right joystick", "Aim + auto-fire when active") +
+        row("AR / PI / FI buttons", "Switch weapon") +
+        row("R button", "Reload")
+    ));
+
+    // ── WEAPONS ───────────────────────────────────────────────────
+    body.appendChild(section("🔫", "WEAPONS",
+        `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:${sp(4)} ${sp(6)};margin-top:${sp(4)}">
+            <span style="color:rgb(255,200,0)">Weapon</span>
+            <span style="color:rgb(255,200,0)">Ammo</span>
+            <span style="color:rgb(255,200,0)">Damage</span>
+            <span style="color:rgb(255,200,0)">Fire rate</span>
+            <span style="color:rgb(255,200,0)">Reload</span>
+            <span>Rifle</span><span>30</span><span>25 HP</span><span>Fast (100ms)</span><span>2.0s</span>
+            <span>Pistol</span><span>15</span><span>15 HP</span><span>Medium (200ms)</span><span>1.5s</span>
+            <span>Fists</span><span>∞</span><span style="color:#f88">100 HP</span><span>200ms</span><span>—</span>
+        </div>
+        <div style="margin-top:${sp(8)};color:rgba(255,255,255,0.55);font-size:${sp(11)}">
+            ⚠️ Fists hit in a 60px cone (±90°) in front of you. One hit kill.
+        </div>`
+    ));
+
+    // ── HP & HEALING ─────────────────────────────────────────────
+    body.appendChild(section("❤️", "HP & HEALING",
+        `Every player starts with <b style="color:#8f8">100 HP</b>.<br>
+        If you take no damage for <b style="color:#ff8">4 seconds</b>, you automatically
+        regenerate <b style="color:#8f8">+8 HP per second</b> until full.`
+    ));
+
+    // ── XP & LEVELS ──────────────────────────────────────────────
+    body.appendChild(section("⭐", "XP & LEVELS",
+        row("+10 XP", "per kill", "rgb(255,200,0)") +
+        row("+2 XP",  "per match played (first spawn only)", "rgb(255,200,0)") +
+        `<div style="margin-top:${sp(6)}">
+            Level formula: <span style="color:rgb(255,200,0)">Level = floor(XP / 100) + 1</span><br>
+            <span style="color:rgba(255,255,255,0.5);font-size:${sp(11)}">
+                XP and stats are only saved for registered accounts, not guests.
+            </span>
+        </div>`
+    ));
+
+    // ── LOBBY ─────────────────────────────────────────────────────
+    body.appendChild(section("🏠", "LOBBY",
+        row("Public lobby", "Anyone can join with one click", "rgb(100,200,255)") +
+        row("Private lobby 🔒", "Requires a password to join", "rgb(255,180,80)") +
+        `<div style="margin-top:${sp(6)};color:rgba(255,255,255,0.55);font-size:${sp(11)}">
+            If you disconnect, you have <b style="color:#ff8">5 minutes</b> to rejoin
+            the same lobby and keep your session stats.
+        </div>`
+    ));
+
+    // ── DEATHS & SELFKILL ─────────────────────────────────────────
+    body.appendChild(section("💀", "DEATHS",
+        `<div>Only deaths caused by <b style="color:#f88">other players</b> count toward your death total.</div>
+        <div style="margin-top:${sp(5)}">Using <b style="color:rgb(255,220,80)">ESC (hold)</b> to respawn voluntarily
+        does <b style="color:#8f8">NOT</b> add a death to your stats.</div>`
+    ));
+
+    overlay.appendChild(body);
+
+    // ── Bottone CLOSE ─────────────────────────────────────────────
+    const closeBtn = document.createElement("button");
+    closeBtn.textContent = "← BACK";
+    closeBtn.style.cssText = `
+        margin-top: ${sp(20)};
+        padding: ${sp(11)} ${sp(32)};
+        background: transparent; color: rgba(255,255,255,0.6);
+        font-size: ${sp(14)}; font-family: monospace;
+        border: 1px solid rgba(255,255,255,0.25);
+        border-radius: 6px; cursor: pointer; letter-spacing: 1px;
+    `;
+    closeBtn.addEventListener("click", () => {
+        overlay.remove();
+        if (parentContainer) parentContainer.style.display = "flex";
+    });
+    overlay.appendChild(closeBtn);
+
+    document.body.appendChild(overlay);
 }
