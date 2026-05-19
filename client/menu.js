@@ -241,27 +241,39 @@ export async function mostraSchermataStats(parentContainer) {
         z-index:99999; font-family:monospace; color:white; overflow-y:auto;
     `;
 
+    // Titolo + badge LIVE pulsante
+    const titleRow = document.createElement("div");
+    titleRow.style.cssText = `display:flex; align-items:center; gap:${Math.round(10*scaleUI)}px;
+        margin-bottom:${Math.round(20*scaleUI)}px;`;
     const title = document.createElement("div");
     title.textContent = "GLOBAL LEADERBOARD";
-    title.style.cssText = `font-size:${Math.round(28*scaleUI)}px; color:rgb(0,255,100);
-        letter-spacing:3px; margin-bottom:${Math.round(20*scaleUI)}px;`;
+    title.style.cssText = `font-size:${Math.round(28*scaleUI)}px; color:rgb(0,255,100); letter-spacing:3px;`;
+    const liveDot = document.createElement("div");
+    liveDot.textContent = "LIVE";
+    liveDot.style.cssText = `font-size:${Math.round(10*scaleUI)}px; color:rgb(0,255,100);
+        background:rgba(0,255,100,0.12); border:1px solid rgba(0,255,100,0.35);
+        border-radius:4px; padding:2px 6px; letter-spacing:2px; animation:livePulse 2s infinite;`;
+    titleRow.appendChild(title);
+    titleRow.appendChild(liveDot);
 
-    // Box statistiche personali (solo se loggato)
+    // Stile animazione pulse (aggiunto una volta sola)
+    if (!document.getElementById("livePulseStyle")) {
+        const style = document.createElement("style");
+        style.id = "livePulseStyle";
+        style.textContent = `@keyframes livePulse { 0%,100%{opacity:1} 50%{opacity:0.3} }`;
+        document.head.appendChild(style);
+    }
+
+    // Box statistiche personali (aggiornato automaticamente ad ogni poll)
+    let myBox = null;
     if (state.accountUsername) {
-        const k  = state.accountKills   || 0;
-        const d  = state.accountMorti   || 0;
-        const lv = state.accountLivello || 1;
-        const xp = state.accountXp      || 0;
-        const kd = d > 0 ? (k / d).toFixed(2) : k > 0 ? k.toFixed(2) : "—";
-        const myBox = document.createElement("div");
+        myBox = document.createElement("div");
         myBox.style.cssText = `width:min(90vw,${Math.round(480*scaleUI)}px);
             background:rgba(0,200,255,0.08); border:1px solid rgba(0,200,255,0.25);
             border-radius:8px; padding:${Math.round(12*scaleUI)}px ${Math.round(16*scaleUI)}px;
             font-family:monospace; font-size:${Math.round(13*scaleUI)}px;
-            color:rgba(255,255,255,0.75); margin-bottom:${Math.round(14*scaleUI)}px; text-align:center; line-height:1.8;`;
-        myBox.innerHTML = `<span style="color:rgb(0,200,255);font-size:${Math.round(16*scaleUI)}px;font-weight:bold">${state.accountUsername}</span><br>
-            <span style="color:rgb(0,255,100)">Lv.${lv}</span> &nbsp;·&nbsp; <span style="color:rgb(255,200,0)">${xp} XP</span><br>
-            Kills: <b style="color:#8f8">${k}</b> &nbsp; Deaths: <b style="color:#f88">${d}</b> &nbsp; K/D: <b style="color:#ff8">${kd}</b>`;
+            color:rgba(255,255,255,0.75); margin-bottom:${Math.round(14*scaleUI)}px;
+            text-align:center; line-height:1.8;`;
         overlay.appendChild(myBox);
     }
 
@@ -271,42 +283,53 @@ export async function mostraSchermataStats(parentContainer) {
         border-radius:10px; overflow:hidden; font-size:${Math.round(14*scaleUI)}px;`;
     table.innerHTML = `<div style="padding:16px;text-align:center;color:rgba(255,255,255,0.5)">Loading...</div>`;
 
-    // Riga pulsanti: AGGIORNA + INDIETRO
-    const btnRow = document.createElement("div");
-    btnRow.style.cssText = `display:flex; gap:${Math.round(10*scaleUI)}px; margin-top:${Math.round(20*scaleUI)}px;`;
-
-    const refreshBtn = document.createElement("button");
-    refreshBtn.textContent = "↻ REFRESH";
-    refreshBtn.style.cssText = `padding:${Math.round(10*scaleUI)}px ${Math.round(20*scaleUI)}px;
-        background:rgba(0,255,100,0.1); color:rgb(0,255,100);
-        font-size:${Math.round(14*scaleUI)}px; font-family:monospace;
-        border:1px solid rgba(0,255,100,0.3); border-radius:6px; cursor:pointer;`;
-
+    // Solo bottone BACK (niente refresh manuale)
     const backBtn = document.createElement("button");
-    backBtn.textContent = "← BACK";
-    backBtn.style.cssText = `padding:${Math.round(10*scaleUI)}px ${Math.round(28*scaleUI)}px;
+    backBtn.textContent = "\u2190 BACK";
+    backBtn.style.cssText = `margin-top:${Math.round(20*scaleUI)}px;
+        padding:${Math.round(10*scaleUI)}px ${Math.round(28*scaleUI)}px;
         background:transparent; color:rgba(255,255,255,0.6);
         font-size:${Math.round(14*scaleUI)}px; font-family:monospace;
         border:1px solid rgba(255,255,255,0.2); border-radius:6px; cursor:pointer;`;
-    backBtn.addEventListener("click", () => {
-        overlay.remove();
-        if (parentContainer) parentContainer.style.display = "flex";
-    });
 
-    btnRow.appendChild(refreshBtn);
-    btnRow.appendChild(backBtn);
-
-    overlay.appendChild(title);
+    overlay.appendChild(titleRow);
     overlay.appendChild(table);
-    overlay.appendChild(btnRow);
+    overlay.appendChild(backBtn);
     document.body.appendChild(overlay);
 
+    // Aggiorna myBox con i dati freschi dal DB (o dallo state se non trovato)
+    function aggiornaMyBox(dbRow) {
+        if (!myBox) return;
+        const k  = dbRow ? Number(dbRow.kills_totali) : (state.accountKills   || 0);
+        const d  = dbRow ? Number(dbRow.morti_totali) : (state.accountMorti   || 0);
+        const lv = dbRow ? Number(dbRow.livello)      : (state.accountLivello || 1);
+        const xp = dbRow ? Number(dbRow.xp)           : (state.accountXp      || 0);
+        const kd = d > 0 ? (k / d).toFixed(2) : k > 0 ? k.toFixed(2) : "\u2014";
+        // Sincronizza lo state locale coi valori reali del DB
+        if (dbRow) {
+            state.accountKills   = k;
+            state.accountMorti   = d;
+            state.accountLivello = lv;
+            state.accountXp      = xp;
+        }
+        myBox.innerHTML = `
+            <span style="color:rgb(0,200,255);font-size:${Math.round(16*scaleUI)}px;font-weight:bold">${state.accountUsername}</span><br>
+            <span style="color:rgb(0,255,100)">Lv.${lv}</span> &nbsp;&middot;&nbsp; <span style="color:rgb(255,200,0)">${xp} XP</span><br>
+            Kills: <b style="color:#8f8">${k}</b> &nbsp; Deaths: <b style="color:#f88">${d}</b> &nbsp; K/D: <b style="color:#ff8">${kd}</b>`;
+    }
+
+    let pollTimer = null;
+
     async function caricaClassifica() {
-        table.innerHTML = `<div style="padding:16px;text-align:center;color:rgba(255,255,255,0.5)">Loading...</div>`;
-        refreshBtn.disabled = true;
         try {
             const res  = await fetch("/php/classifica.php");
             const data = await res.json();
+
+            // Cerca la riga dell'utente corrente per aggiornare le sue stats
+            const myRow = state.accountUsername
+                ? (data.classifica || []).find(p => p.username === state.accountUsername) || null
+                : null;
+            aggiornaMyBox(myRow);
 
             if (!data.ok || !data.classifica.length) {
                 table.innerHTML = `<div style="padding:20px;text-align:center;color:rgba(255,255,255,0.4)">No data available.</div>`;
@@ -344,11 +367,17 @@ export async function mostraSchermataStats(parentContainer) {
             table.innerHTML = html;
         } catch (e) {
             table.innerHTML = `<div style="padding:20px;text-align:center;color:rgb(220,80,80)">Failed to load.</div>`;
-        } finally {
-            refreshBtn.disabled = false;
         }
     }
 
-    refreshBtn.addEventListener("click", caricaClassifica);
-    caricaClassifica();
+    // Prima chiamata immediata, poi ogni 5 secondi
+    await caricaClassifica();
+    pollTimer = setInterval(caricaClassifica, 5000);
+
+    // Chiudi: ferma il poll e ripristina il menu
+    backBtn.addEventListener("click", () => {
+        clearInterval(pollTimer);
+        overlay.remove();
+        if (parentContainer) parentContainer.style.display = "flex";
+    });
 }
