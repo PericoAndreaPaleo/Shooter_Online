@@ -10,6 +10,7 @@
 // ============================================================
 
 import { state, GAME_W, GAME_H, hx, hy, hs } from "./state.js";
+import { mostraBattlePass } from "./battlepass.js";
 
 // ── Dipendenze iniettate da main.js ──────────────────────────────
 let uiElementsArray     = null;
@@ -267,6 +268,10 @@ export function mostraSchermataLobby(errorMessage) {
     const howToPlayBtn = creaBottomBtn("HOW TO PLAY", "rgba(255,200,0,0.85)");
     howToPlayBtn.addEventListener("click", () => mostraHowToPlay(container));
     bottomRow.appendChild(howToPlayBtn);
+
+    const bpBtn = creaBottomBtn("BATTLE PASS", "rgba(160,0,255,0.85)");
+    bpBtn.addEventListener("click", () => mostraBattlePass(container));
+    bottomRow.appendChild(bpBtn);
 
     const statsBtn = creaBottomBtn("STATS", "rgba(0,200,255,0.8)");
     statsBtn.addEventListener("click", () => {

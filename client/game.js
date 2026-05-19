@@ -18,6 +18,7 @@ import {
 } from "./hud.js";
 import { aggiornaWeaponBtns, aggiornaReloadBtn, creaTouchUI } from "./touch.js";
 import { triggerPunch } from "./weapons.js";
+import { getPlayerColorId, getReward, getRainbowColor } from "./battlepass.js";
 
 // ── Dipendenze iniettate da main.js ──────────────────────────
 /** Funzione che distrugge tutti gli elementi UI correnti */
@@ -705,12 +706,54 @@ export function aggiornaStato(serverSnapshot, canvas) {
                 localPlayerData.sprite.hidden = false;
                 if (localPlayerData.hpBar) localPlayerData.hpBar.hidden = false;
 
+                // Aggiorna colore player con cosmetic Battle Pass (ogni frame, supporta rainbow)
+                if (isLocalPlayer && !serverPlayerData.hitFlash) {
+                    const pid = getPlayerColorId();
+                    if (pid) {
+                        const rew = getReward(pid);
+                        if (rew) {
+                            if (rew.rainbow) {
+                                const c = getRainbowColor(0);
+                                const m = c.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+                                if (m) localPlayerData.sprite.color = rgb(+m[1], +m[2], +m[3]);
+                            } else {
+                                const m = rew.color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+                                if (m && !localPlayerData._cosmeticSet) {
+                                    localPlayerData.sprite.color = rgb(+m[1], +m[2], +m[3]);
+                                    localPlayerData._cosmeticSet = pid; // evita scritture continue per i non-rainbow
+                                } else if (m && localPlayerData._cosmeticSet !== pid) {
+                                    localPlayerData.sprite.color = rgb(+m[1], +m[2], +m[3]);
+                                    localPlayerData._cosmeticSet = pid;
+                                }
+                            }
+                        } else {
+                            if (localPlayerData._cosmeticSet) {
+                                localPlayerData.sprite.color = rgb(222, 196, 145);
+                                localPlayerData._cosmeticSet = null;
+                            }
+                        }
+                    } else if (localPlayerData._cosmeticSet) {
+                        localPlayerData.sprite.color = rgb(222, 196, 145);
+                        localPlayerData._cosmeticSet = null;
+                    }
+                }
+
                 // Effetto flash quando colpito (bianco per 80ms)
                 if (serverPlayerData.hitFlash) {
                     localPlayerData.sprite.color = rgb(255, 255, 255);
                     if (isLocalPlayer) playHitSound();
+                    // Dopo il flash torna al colore cosmetico (non piu' default pelle)
                     setTimeout(() => {
-                        if (localPlayerData.sprite) localPlayerData.sprite.color = rgb(222, 196, 145);
+                        if (!localPlayerData.sprite) return;
+                        const pid2 = getPlayerColorId();
+                        const rew2 = pid2 ? getReward(pid2) : null;
+                        if (rew2 && !rew2.rainbow) {
+                            const m2 = rew2.color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+                            if (m2) localPlayerData.sprite.color = rgb(+m2[1], +m2[2], +m2[3]);
+                        } else if (!rew2) {
+                            localPlayerData.sprite.color = rgb(222, 196, 145);
+                        }
+                        // rainbow: verra' aggiornato al prossimo frame automaticamente
                     }, 80);
                 }
 

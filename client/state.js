@@ -72,6 +72,12 @@ export const state = {
     accountKills:    0,
     accountMorti:    0,
 
+    // ── Cosmetici Battle Pass (letti da battlepass.js) ──────────
+    // Vengono aggiornati da weapons.js e game.js ogni frame.
+    // Null = colore default. Impostati al runtime, non in localStorage.
+    cosmeticPlayerColorId: null,
+    cosmeticWeaponColorId: null,
+
     // ── Joystick touch (mobile) ─────────────────────────────────
     aimJoyAngle:  0,                    // angolo di mira dal joystick destro
     aimJoyActive: false,                // true se il joystick destro è attivo

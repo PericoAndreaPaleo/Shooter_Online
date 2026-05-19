@@ -10,6 +10,7 @@
 // ============================================================
 
 import { state } from "./state.js";
+import { getPlayerColorId, getWeaponColorId, getReward, getRainbowColor } from "./battlepass.js";
 
 /** Riferimento all'oggetto Kaboom che disegna le armi (singleton) */
 let weaponDrawObject = null;
@@ -40,6 +41,53 @@ export function triggerPunch(playerId, hand) {
 // ============================================================
 // OGGETTO DI DISEGNO KABOOM
 // ============================================================
+
+/**
+ * Restituisce il colore Kaboom rgb() per il PLAYER locale
+ * in base al reward selezionato nel Battle Pass.
+ * Per i giocatori avversari usa sempre il default pelle.
+ */
+function getKaboomPlayerColor(isLocalPlayer) {
+    if (!isLocalPlayer) return rgb(222, 196, 145); // pelle default
+    const id = getPlayerColorId();
+    if (!id) return rgb(222, 196, 145);
+    const reward = getReward(id);
+    if (!reward) return rgb(222, 196, 145);
+    if (reward.rainbow) {
+        const c = getRainbowColor(0);
+        return parseRgbToKaboom(c);
+    }
+    return parseRgbToKaboom(reward.color);
+}
+
+/**
+ * Restituisce la stringa CSS del colore per le ARMI / mani locali.
+ * Usata nelle drawRect / drawCircle (accettano stringa CSS in Kaboom v3).
+ */
+function getWeaponCssColor() {
+    const id = getWeaponColorId();
+    if (!id) return null; // usa il default del chiamante
+    const reward = getReward(id);
+    if (!reward) return null;
+    if (reward.rainbow) return getRainbowColor(60); // offset 60deg per distinguere da player
+    return reward.color;
+}
+
+function getSkinCssColor() {
+    const id = getPlayerColorId();
+    if (!id) return null;
+    const reward = getReward(id);
+    if (!reward) return null;
+    if (reward.rainbow) return getRainbowColor(0);
+    return reward.color;
+}
+
+/** Converte "rgb(r,g,b)" in { r, g, b } e crea un Kaboom rgb() */
+function parseRgbToKaboom(cssRgb) {
+    const m = cssRgb.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+    if (!m) return rgb(222, 196, 145);
+    return rgb(Number(m[1]), Number(m[2]), Number(m[3]));
+}
 
 /**
  * Crea (o ricrea) l'oggetto Kaboom responsabile del disegno
@@ -82,13 +130,23 @@ export function creaGunDrawObj() {
                     const sinAngle = Math.sin(angle);
                     const perpDir  = { x: -sinAngle, y: cosAngle }; // perpendicolare (90°)
 
+                    const isLocal    = (playerId === state.myId);
+                    const skinColor  = isLocal ? (getSkinCssColor()   || null) : null;
+                    const weapColor  = isLocal ? (getWeaponCssColor() || null) : null;
+
                     // ── Helper: disegna una mano (cerchio con bordo) ─────────────
                     const drawHand = (handX, handY, radius) => {
+                        const fill = skinColor ? parseRgbToKaboom(skinColor) : rgb(222, 196, 145);
                         // Contorno nero
                         drawCircle({ pos: vec2(handX, handY), radius: radius + 2, color: rgb(0, 0, 0) });
-                        // Colore pelle
-                        drawCircle({ pos: vec2(handX, handY), radius,             color: rgb(222, 196, 145) });
+                        // Colore pelle / cosmetico
+                        drawCircle({ pos: vec2(handX, handY), radius, color: fill });
                     };
+
+                    // Helper per il colore dell'arma (rect)
+                    const weaponColor = weapColor
+                        ? parseRgbToKaboom(weapColor)
+                        : rgb(17, 17, 17);
 
                     // ── fists (mani nude) ─────────────────────────
                     if (weaponType === "fists") {
@@ -134,7 +192,7 @@ export function creaGunDrawObj() {
                             pos:    vec2(playerX + cosAngle * BODY_RADIUS, playerY + sinAngle * BODY_RADIUS),
                             width:  30,
                             height: 9,
-                            color:  rgb(17, 17, 17),
+                            color:  weaponColor,
                             radius: 4,
                             angle:  angle * (180 / Math.PI),
                             anchor: "left",
@@ -154,7 +212,7 @@ export function creaGunDrawObj() {
                             pos:    vec2(playerX + cosAngle * BODY_RADIUS, playerY + sinAngle * BODY_RADIUS),
                             width:  60,
                             height: 9,
-                            color:  rgb(17, 17, 17),
+                            color:  weaponColor,
                             radius: 4,
                             angle:  angle * (180 / Math.PI),
                             anchor: "left",

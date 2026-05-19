@@ -5,6 +5,7 @@
 import { state, GAME_W, GAME_H, hx, hy, hs, calcolaLetterbox } from "./state.js";
 import { salvaStat, registraPartita, resetPartitaFlag } from "./main.js";
 import { mostraHowToPlay } from "./lobby.js";
+import { mostraBattlePass } from "./battlepass.js";
 
 // ── Dipendenze iniettate da main.js ──────────────────────────────
 let uiElementsArray      = null;
@@ -184,9 +185,13 @@ export function mostraMenu(subtitleMessage) {
     const howToPlayBtn = creaBtn("HOW TO PLAY", "rgba(255,200,0,0.85)");
     howToPlayBtn.addEventListener("click", () => mostraHowToPlay(container));
 
+    const bpBtn = creaBtn("BATTLE PASS", "rgba(160,0,255,0.85)");
+    bpBtn.addEventListener("click", () => mostraBattlePass(container));
+
     navRow.appendChild(lobbyBtn);
     navRow.appendChild(howToPlayBtn);
     navRow.appendChild(statsBtn);
+    navRow.appendChild(bpBtn);
     container.appendChild(navRow);
 
     // Auth row
