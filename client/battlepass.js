@@ -122,9 +122,28 @@ export function getPlayerColorId()  { return localStorage.getItem(LS_PLAYER) || 
 /** Restituisce il colore corrente dell'arma (id reward o null = default) */
 export function getWeaponColorId()  { return localStorage.getItem(LS_WEAPON) || null; }
 
-/** Salva la scelta del giocatore */
-export function setPlayerColorId(id) { localStorage.setItem(LS_PLAYER, id || ""); }
-export function setWeaponColorId(id) { localStorage.setItem(LS_WEAPON, id || ""); }
+/** Salva la scelta del giocatore e notifica il server in tempo reale */
+export function setPlayerColorId(id) {
+    localStorage.setItem(LS_PLAYER, id || "");
+    _notifyServerCosmetics();
+}
+export function setWeaponColorId(id) {
+    localStorage.setItem(LS_WEAPON, id || "");
+    _notifyServerCosmetics();
+}
+
+/**
+ * Invia al server le skin attualmente selezionate via socket.
+ * Fire-and-forget: se il socket non e' disponibile (menu principale), non fa nulla.
+ */
+function _notifyServerCosmetics() {
+    const socket = state.socket;
+    if (!socket || !socket.connected) return;
+    socket.emit("updateCosmetics", {
+        playerColorId: localStorage.getItem(LS_PLAYER) || null,
+        weaponColorId: localStorage.getItem(LS_WEAPON) || null,
+    });
+}
 
 /**
  * Dato un reward id, restituisce l'oggetto reward.

@@ -475,6 +475,26 @@ function createLobby(lobbyId, lobbyName, password) {
             // La partita e le stats vengono registrate dal client via AJAX.
         });
 
+        // ── updateCosmetics ───────────────────────────────────────
+        // Il client notifica il server quando cambia skin in tempo reale.
+        // Il server aggiorna l'oggetto player: al tick successivo (~16ms)
+        // il nuovo colore viene già incluso nello snapshot broadcast a tutti.
+        socket.on("updateCosmetics", (data) => {
+            const player = lobby.players[socket.id];
+            if (!player || typeof data !== "object" || !data) return;
+
+            if (Object.prototype.hasOwnProperty.call(data, "playerColorId")) {
+                player.playerColorId = data.playerColorId
+                    ? String(data.playerColorId).slice(0, 32)
+                    : null;
+            }
+            if (Object.prototype.hasOwnProperty.call(data, "weaponColorId")) {
+                player.weaponColorId = data.weaponColorId
+                    ? String(data.weaponColorId).slice(0, 32)
+                    : null;
+            }
+        });
+
         // ── input ─────────────────────────────────────────────────
         // Il client invia i tasti direzionali premuti ogni volta che cambiano.
         socket.on("input", (inputData) => {
