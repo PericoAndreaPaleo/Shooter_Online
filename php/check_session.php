@@ -2,18 +2,25 @@
 // ============================================================
 // check_session.php — Verifica sessione esistente
 //
-// Legge il token da: body POST > cookie > $_SESSION
+// Riceve via POST JSON: { token: "..." }
 // Risponde con: { ok: true, user: { ... } } oppure { error }
 //
-// FIX SESSIONI: usa SOLO il token DB come fonte di verità.
-//   $_SESSION non viene usata per la validazione (ogni tab
-//   ha una sessione PHP diversa — causerebbe logout random).
-//   Il token viene prorogato automaticamente se mancano
-//   meno di 7 giorni alla scadenza (rolling window 30gg).
+// FONTE DI VERITÀ: il token nel DB.
+// $_SESSION PHP non viene usata per validare (ogni tab ha una
+// sessione PHP separata e causerebbe logout casuali).
 //
-//   PULIZIA AUTOMATICA: ogni chiamata a check_session elimina
-//   le sessioni scadute dell'utente corrente, così il DB non
-//   cresce indefinitamente anche senza nuovi login.
+// SESSIONE UNICA: se il token non esiste nel DB significa che
+// l'utente ha fatto login da un altro dispositivo/browser,
+// che ha cancellato tutti i token precedenti. In questo caso
+// si risponde con { error: "session_replaced" } — codice
+// speciale che auth.js usa per mostrare il messaggio corretto
+// ("Hai effettuato l'accesso da un altro dispositivo").
+//
+// ROLLING WINDOW: se mancano meno di 7 giorni alla scadenza,
+// il token viene prorogato automaticamente a 30 giorni.
+//
+// PULIZIA: ogni chiamata elimina le sessioni scadute
+// dell'utente corrente per tenere il DB pulito.
 // ============================================================
 
 require_once 'db.php';
@@ -26,8 +33,9 @@ header('Content-Type: application/json');
 
 session_start();
 
-// Determina il token (localStorage via POST > cookie > sessione PHP)
-$token = '';
+// Determina il token da verificare:
+// Priorità: body POST JSON > cookie > sessione PHP
+$token    = '';
 $bodyData = json_decode(file_get_contents('php://input'), true);
 if (!empty($bodyData['token']))         $token = trim($bodyData['token']);
 elseif (!empty($_COOKIE['auth_token'])) $token = trim($_COOKIE['auth_token']);
@@ -42,18 +50,34 @@ if (!$token) {
 try {
     $pdo = getDB();
 
-    // Verifica token nel DB — $_SESSION non usata per validare
-    $stmt = $pdo->prepare('
-        SELECT s.utente_id, s.scade_il, u.username
-        FROM sessioni s
-        JOIN utenti u ON u.id = s.utente_id
-        WHERE s.token = ? AND s.scade_il > NOW()
-    ');
-    $stmt->execute([$token]);
-    $session = $stmt->fetch();
+    // Controlla se il token esiste nel DB (anche scaduto, per distinguere
+    // "mai esistito / già cancellato" da "scaduto per tempo")
+    $stmtAny = $pdo->prepare('SELECT s.scade_il, s.utente_id, u.username FROM sessioni s JOIN utenti u ON u.id = s.utente_id WHERE s.token = ?');
+    $stmtAny->execute([$token]);
+    $anyRow = $stmtAny->fetch();
 
-    if (!$session) {
-        // Token scaduto o inesistente: pulisci tutto
+    if (!$anyRow) {
+        // Il token non esiste nel DB.
+        // Con la sessione unica, questo significa che l'utente ha fatto
+        // login da un altro dispositivo che ha cancellato questo token.
+        // Pulizia locale e risposta con codice speciale.
+        $_SESSION = [];
+        session_destroy();
+        setcookie('auth_token',    '', time() - 3600, '/', '', true, true);
+        setcookie('auth_username', '', time() - 3600, '/', '', true, true);
+        http_response_code(401);
+        echo json_encode([
+            'error'  => 'session_replaced',
+            'message'=> 'Your account has been logged in from another device. You have been disconnected.'
+        ]);
+        exit;
+    }
+
+    // Il token esiste ma potrebbe essere scaduto per il normale timeout
+    $now    = new DateTime();
+    $scadeIl = new DateTime($anyRow['scade_il']);
+    if ($scadeIl <= $now) {
+        // Scaduto per timeout normale (non per sessione unica)
         $_SESSION = [];
         session_destroy();
         setcookie('auth_token',    '', time() - 3600, '/', '', true, true);
@@ -63,25 +87,24 @@ try {
         exit;
     }
 
-    // ── Pulizia sessioni scadute (opportunistica) ────────────────
-    // Elimina le sessioni scadute di questo utente ad ogni check.
-    // Operazione leggera: usa l'indice su utente_id + scade_il.
+    // ── Token valido ────────────────────────────────────────────
+    $session = $anyRow; // riuso la riga già letta
+
+    // Pulizia opportunistica: elimina le sessioni scadute di questo utente.
+    // Operazione leggera, sfrutta l'indice su (utente_id, scade_il).
     $pdo->prepare('DELETE FROM sessioni WHERE utente_id = ? AND scade_il <= NOW()')
         ->execute([$session['utente_id']]);
-    // ─────────────────────────────────────────────────────────────
 
-    // Rolling window: se mancano meno di 7 giorni alla scadenza, proroga a 30gg
-    $scadeIl = new DateTime($session['scade_il']);
-    $ora     = new DateTime();
-    if ($scadeIl > $ora && ($scadeIl->getTimestamp() - $ora->getTimestamp()) < 7 * 86400) {
+    // Rolling window: proroga il token se mancano meno di 7 giorni
+    if (($scadeIl->getTimestamp() - $now->getTimestamp()) < 7 * 86400) {
         $nuovaScadenza = date('Y-m-d H:i:s', strtotime('+30 days'));
-        $upd = $pdo->prepare('UPDATE sessioni SET scade_il = ? WHERE token = ?');
-        $upd->execute([$nuovaScadenza, $token]);
-        setcookie('auth_token',    $token,                time() + (30 * 24 * 3600), '/', '', true, true);
+        $pdo->prepare('UPDATE sessioni SET scade_il = ? WHERE token = ?')
+            ->execute([$nuovaScadenza, $token]);
+        setcookie('auth_token',             $token,                time() + (30 * 24 * 3600), '/', '', true, true);
         setcookie('auth_username', $session['username'], time() + (30 * 24 * 3600), '/', '', true, true);
     }
 
-    // Leggi statistiche
+    // Leggi statistiche (con lock condiviso per consistenza)
     $pdo->beginTransaction();
     $stmt = $pdo->prepare('
         SELECT livello, xp, kills_totali, morti_totali, partite
@@ -102,7 +125,7 @@ try {
     $stmt->execute([$session['utente_id']]);
     $cosmetics = $stmt->fetch();
 
-    // Aggiorna sessione PHP (solo per comodità lato server, non usata per validare)
+    // Aggiorna sessione PHP (solo per comodità, non usata per validare)
     $_SESSION['logged']   = true;
     $_SESSION['user_id']  = $session['utente_id'];
     $_SESSION['username'] = $session['username'];
@@ -113,8 +136,10 @@ try {
         'user' => array_merge(
             ['utente_id' => $session['utente_id'], 'username' => $session['username']],
             $stats     ?: [],
-            ['player_color_id' => $cosmetics['player_color_id'] ?? null,
-             'weapon_color_id' => $cosmetics['weapon_color_id'] ?? null]
+            [
+                'player_color_id' => $cosmetics['player_color_id'] ?? null,
+                'weapon_color_id' => $cosmetics['weapon_color_id'] ?? null,
+            ]
         )
     ]);
 

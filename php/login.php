@@ -7,11 +7,11 @@
 //                      xp, kills_totali, morti_totali,
 //                      player_color_id, weapon_color_id }
 //
-// FIX SESSIONI: al login vengono eliminate tutte le sessioni
-// scadute dell'utente, e vengono mantenute al massimo
-// MAX_SESSIONI_ATTIVE sessioni valide (le più recenti).
-// Questo evita l'accumulo illimitato di righe per lo stesso
-// account (prima era possibile avere 120+ sessioni attive).
+// SESSIONE UNICA: al login vengono eliminate TUTTE le sessioni
+// precedenti dell'utente (non solo quelle scadute).
+// Questo garantisce che un account possa essere usato da un
+// solo dispositivo/tab alla volta: il login su un nuovo device
+// disconnette automaticamente tutti gli altri.
 // ============================================================
 
 require_once 'db.php';
@@ -23,11 +23,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 header('Content-Type: application/json');
 
 session_start();
-
-// Numero massimo di sessioni attive contemporanee per utente.
-// Se l'utente ne ha già MAX_SESSIONI_ATTIVE valide, la più
-// vecchia viene eliminata prima di crearne una nuova.
-const MAX_SESSIONI_ATTIVE = 3;
 
 $data     = json_decode(file_get_contents('php://input'), true);
 $username = trim($data['username'] ?? '');
@@ -42,6 +37,7 @@ if (!$username || !$password) {
 try {
     $pdo = getDB();
 
+    // Cerca l'utente per username
     $stmt = $pdo->prepare('SELECT id, password_hash FROM utenti WHERE username = ?');
     $stmt->execute([$username]);
     $user = $stmt->fetch();
@@ -52,73 +48,63 @@ try {
         exit;
     }
 
-    // ── Pulizia sessioni ────────────────────────────────────────
-    // 1. Elimina tutte le sessioni scadute di questo utente
-    $pdo->prepare('DELETE FROM sessioni WHERE utente_id = ? AND scade_il <= NOW()')
+    // ── SESSIONE UNICA ──────────────────────────────────────────
+    // Cancella TUTTE le sessioni esistenti di questo utente,
+    // sia quelle valide che quelle già scadute.
+    // Effetto: chiunque fosse loggato con questo account
+    // (su altri dispositivi, browser o tab) verrà disconnesso
+    // alla prossima verifica della sessione (check_session.php).
+    $pdo->prepare('DELETE FROM sessioni WHERE utente_id = ?')
         ->execute([$user['id']]);
-
-    // 2. Se ci sono ancora troppe sessioni valide, elimina le più vecchie
-    //    (mantieni solo le MAX_SESSIONI_ATTIVE - 1 più recenti,
-    //     così c'è posto per quella nuova che stiamo per creare)
-    $stmt = $pdo->prepare('SELECT COUNT(*) FROM sessioni WHERE utente_id = ? AND scade_il > NOW()');
-    $stmt->execute([$user['id']]);
-    $sessioniAttive = (int)$stmt->fetchColumn();
-
-    if ($sessioniAttive >= MAX_SESSIONI_ATTIVE) {
-        // Quante ne dobbiamo eliminare per fare posto a quella nuova
-        $daEliminare = $sessioniAttive - MAX_SESSIONI_ATTIVE + 1;
-        // Elimina le più vecchie (ORDER BY scade_il ASC → prima le più prossime a scadere)
-        $pdo->prepare(
-            'DELETE FROM sessioni
-             WHERE utente_id = ? AND scade_il > NOW()
-             ORDER BY scade_il ASC
-             LIMIT ' . (int)$daEliminare
-        )->execute([$user['id']]);
-    }
     // ────────────────────────────────────────────────────────────
 
-    // Genera token (64 char hex = 32 bytes)
+    // Genera un token sicuro (64 char hex = 32 byte random)
     $token   = bin2hex(random_bytes(32));
+
+    // La sessione dura 30 giorni; viene prorogata automaticamente
+    // da check_session.php se mancano meno di 7 giorni alla scadenza.
     $scadeIl = date('Y-m-d H:i:s', strtotime('+30 days'));
 
+    // Inserisce la nuova sessione (unica) nel DB
     $stmt = $pdo->prepare('INSERT INTO sessioni (token, utente_id, scade_il) VALUES (?, ?, ?)');
     $stmt->execute([$token, $user['id'], $scadeIl]);
 
+    // Aggiorna il timestamp dell'ultimo accesso
     $stmt = $pdo->prepare('UPDATE utenti SET ultimo_accesso = NOW() WHERE id = ?');
     $stmt->execute([$user['id']]);
 
-    // Statistiche
+    // Leggi statistiche per il client
     $stmt = $pdo->prepare('SELECT livello, xp, kills_totali, morti_totali FROM statistiche_giocatore WHERE utente_id = ?');
     $stmt->execute([$user['id']]);
     $stats = $stmt->fetch();
 
-    // Cosmetics — assicura che la riga esista
+    // Assicura che la riga cosmetics esista (utenti vecchi potrebbero non averla)
     $pdo->prepare('INSERT IGNORE INTO cosmetics_giocatore (utente_id) VALUES (?)')->execute([$user['id']]);
     $stmt = $pdo->prepare('SELECT player_color_id, weapon_color_id FROM cosmetics_giocatore WHERE utente_id = ?');
     $stmt->execute([$user['id']]);
     $cosmetics = $stmt->fetch();
 
-    // Sessione PHP
+    // Aggiorna la sessione PHP nativa (opzionale, non usata per validare)
     $_SESSION['logged']   = true;
     $_SESSION['user_id']  = $user['id'];
     $_SESSION['username'] = $username;
     $_SESSION['token']    = $token;
 
-    // Cookie 30 giorni
+    // Cookie di 30 giorni (utile per auth.php se visitato direttamente)
     setcookie('auth_token',    $token,    time() + (30 * 24 * 3600), '/', '', true, true);
     setcookie('auth_username', $username, time() + (30 * 24 * 3600), '/', '', true, true);
 
     echo json_encode([
-        'ok'             => true,
-        'token'          => $token,
-        'userId'         => $user['id'],
-        'username'       => $username,
-        'livello'        => $stats['livello']      ?? 1,
-        'xp'             => $stats['xp']           ?? 0,
-        'kills_totali'   => $stats['kills_totali'] ?? 0,
-        'morti_totali'   => $stats['morti_totali'] ?? 0,
-        'player_color_id'=> $cosmetics['player_color_id'] ?? null,
-        'weapon_color_id'=> $cosmetics['weapon_color_id'] ?? null,
+        'ok'              => true,
+        'token'           => $token,
+        'userId'          => $user['id'],
+        'username'        => $username,
+        'livello'         => $stats['livello']      ?? 1,
+        'xp'              => $stats['xp']           ?? 0,
+        'kills_totali'    => $stats['kills_totali'] ?? 0,
+        'morti_totali'    => $stats['morti_totali'] ?? 0,
+        'player_color_id' => $cosmetics['player_color_id'] ?? null,
+        'weapon_color_id' => $cosmetics['weapon_color_id'] ?? null,
     ]);
 
 } catch (Exception $e) {
