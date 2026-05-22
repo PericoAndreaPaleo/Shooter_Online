@@ -629,13 +629,24 @@ export function aggiornaStato(serverSnapshot, canvas) {
                 sprite:        playerSprite,
                 labelObj:      nicknameLabel,
                 hpBar:         healthBar,
-                dirIndicator:  { angle: serverPlayerData.angle || 0, visible: true, weapon: serverPlayerData.weapon || "gun" },
-                morto:         serverPlayerData.morto,
-                lastPunchCount: serverPlayerData.punchCount || 0,
-                punchStartTime: null,
-                punchHand:      1,
+            
+                dirIndicator: {
+                    angle: serverPlayerData.angle || 0,
+                    visible: true,
+                    weapon: serverPlayerData.weapon || "gun"
+                },
+            
+                morto:           serverPlayerData.morto,
+                lastPunchCount:  serverPlayerData.punchCount || 0,
+                punchStartTime:  null,
+                punchHand:       1,
+            
+                // =========================
+                // FIX SKIN MULTIPLAYER
+                // =========================
+                playerColorId: serverPlayerData.playerColorId || null,
+                weaponColorId: serverPlayerData.weaponColorId || null,
             };
-
             // Quando il giocatore locale entra in partita per la prima volta
             if (isLocalPlayer) {
                 destroyAllUI();
@@ -654,6 +665,12 @@ export function aggiornaStato(serverSnapshot, canvas) {
         } else {
             const lerp = isLocalPlayer ? 0.8 : 0.3; // il proprio sprite è più reattivo
             const localPlayerData = state.players[playerId];
+
+            // =========================
+            // Sync cosmetics multiplayer
+            // =========================
+            localPlayerData.playerColorId = serverPlayerData.playerColorId || null;
+            localPlayerData.weaponColorId = serverPlayerData.weaponColorId || null;
             const wasDeadBefore   = localPlayerData.morto;
             localPlayerData.morto = serverPlayerData.morto;
 
