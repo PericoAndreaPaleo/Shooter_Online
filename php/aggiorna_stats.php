@@ -2,14 +2,17 @@
 // ============================================================
 // aggiorna_stats.php  —  Aggiornamento DELTA kills/morti in tempo reale
 //
-// Chiamato dal server Node.js:
+// Chiamato dal client:
 //   • a ogni kill  → { token, kills: 1, morti: 0 }
 //   • a ogni morte → { token, kills: 0, morti: 1 }
 //
-// Usa un singolo UPDATE atomico — nessuna transazione necessaria,
-// nessuna race condition possibile anche con chiamate simultanee.
-// Il livello viene ricalcolato inline con la formula:
-//   livello = GREATEST(1, FLOOR((xp + delta_xp) / 100) + 1)
+// Usa una transazione esplicita perché devono essere atomiche:
+//   1) la validazione del token (SELECT su sessioni)
+//   2) l'aggiornamento di kills/morti/xp/livello (UPDATE su statistiche_giocatore)
+//
+// Se una delle due fallisce — errore DB, crash, timeout — il rollback
+// garantisce che il DB non rimanga con un token validato ma le stat
+// non aggiornate (o viceversa). O tutto va a buon fine, o niente.
 // ============================================================
 
 require_once 'db.php';
@@ -25,7 +28,7 @@ $token = trim($data['token'] ?? '');
 $kills = intval($data['kills'] ?? 0);
 $morti = intval($data['morti'] ?? 0);
 
-// Validazione token
+// Validazione input
 if (!$token) {
     http_response_code(400);
     echo json_encode(['error' => 'Missing token.']);
@@ -45,16 +48,26 @@ $deltaXp = $kills * 10; // +10 XP per kill, +0 XP per morte
 try {
     $pdo = getDB();
 
-    // Trova utente dal token
+    // Avvia la transazione: validazione token + aggiornamento stat
+    // devono essere un'unica operazione atomica.
+    $pdo->beginTransaction();
+
+    // 1) Valida il token.
+    //    FOR UPDATE blocca la riga per tutta la durata della transazione,
+    //    impedendo che due richieste simultanee (es. kill e morte nello
+    //    stesso istante) leggano entrambe il token prima che una delle
+    //    due abbia finito di aggiornare le stat.
     $stmt = $pdo->prepare('
         SELECT utente_id FROM sessioni
         WHERE token = ? AND scade_il > NOW()
         LIMIT 1
+        FOR UPDATE
     ');
     $stmt->execute([$token]);
     $row = $stmt->fetch();
 
     if (!$row) {
+        $pdo->rollBack();
         http_response_code(401);
         echo json_encode(['error' => 'Token non valido o scaduto.']);
         exit;
@@ -62,10 +75,10 @@ try {
 
     $utenteId = $row['utente_id'];
 
-    // Un singolo UPDATE atomico — nessuna SELECT necessaria.
-    // In MySQL, nelle espressioni dentro SET, i nomi di colonna si riferiscono
-    // al valore PRIMA dell'aggiornamento della riga stessa, quindi è corretto
-    // usare (xp + ?) sia per aggiornare xp sia per calcolare il livello.
+    // 2) Aggiorna kills, morti, XP e livello in un singolo UPDATE.
+    //    Dentro la transazione questo UPDATE è garantito ad eseguirsi
+    //    o completamente o per niente — se il DB va down a metà scrittura,
+    //    al recovery MySQL annulla l'intera transazione.
     $stmt = $pdo->prepare('
         UPDATE statistiche_giocatore
         SET kills_totali = kills_totali + ?,
@@ -76,9 +89,17 @@ try {
     ');
     $stmt->execute([$kills, $morti, $deltaXp, $deltaXp, $utenteId]);
 
+    // 3) Tutto ok: rende permanenti entrambe le operazioni insieme.
+    $pdo->commit();
+
     echo json_encode(['ok' => true]);
 
 } catch (Exception $e) {
+    // Qualsiasi eccezione fa rollback: le stat tornano al valore
+    // precedente alla chiamata, nessun dato parziale nel DB.
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
     http_response_code(500);
     echo json_encode(['error' => 'Errore server: ' . $e->getMessage()]);
 }
