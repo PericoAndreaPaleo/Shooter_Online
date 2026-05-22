@@ -258,10 +258,27 @@ export function shoot() {
         tipOffset: { x: normalizedDirX * muzzleDistance, y: normalizedDirY * muzzleDistance },
     });
 
-    // Effetti sonori e animazione
+    // ── Effetti sonori e animazione ─────────────────────────────
     if (state.weapon !== "fists") {
-        playShootSound();
+        // Suona lo sparo SOLO se:
+        //   1. Non è in corso una ricarica (state.isReloading = false)
+        //   2. Ci sono ancora proiettili nell'arma corrente (ammo > 0)
+        // Senza questi controlli il suono veniva riprodotto anche
+        // sparando a vuoto (arma scarica) e durante la ricarica,
+        // perché il client emette "shoot" al server indipendentemente
+        // dal conteggio munizioni locale.
+        const currentAmmo = state.weapon === "gun"
+            ? state.myAmmo.gun      // munizioni fucile d'assalto
+            : state.myAmmo.pistol;  // munizioni pistola
+
+        if (!state.isReloading && currentAmmo > 0) {
+            playShootSound();
+        }
+        // Se currentAmmo === 0 o state.isReloading === true:
+        // nessun suono → il giocatore sente silenzio, segnale che
+        // l'arma è scarica o sta ricaricando.
     } else {
+        // I fists non hanno munizioni → il suono è sempre valido
         playFistsSound();
         // Anima il pugno solo se il cooldown da 200ms è scaduto,
         // così ogni animazione corrisponde esattamente a un'hitbox reale.
@@ -296,7 +313,15 @@ function shootWithTouchJoystick() {
     });
 
     if (state.weapon !== "fists") {
-        playShootSound();
+        // Stesso controllo della versione mouse: suona solo se
+        // non si è in ricarica e ci sono munizioni nell'arma corrente.
+        const currentAmmo = state.weapon === "gun"
+            ? state.myAmmo.gun
+            : state.myAmmo.pistol;
+
+        if (!state.isReloading && currentAmmo > 0) {
+            playShootSound();
+        }
     } else {
         playFistsSound();
         // Stesso controllo del mouse: anima solo ogni 200ms
