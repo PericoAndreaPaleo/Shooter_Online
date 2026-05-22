@@ -2,7 +2,7 @@
 
 **Multiplayer shooter 2D top-down in tempo reale** sviluppato con **Kaboom.js** (client) e **Node.js + Socket.IO** (server).
 
-Gioca in lobby da massimo 8 giocatori con movimento fluido, tre armi distinte, una mappa procedurale con ostacoli, un sistema di account con statistiche persistenti e supporto completo per dispositivi mobile.
+Gioca in lobby da massimo 8 giocatori con movimento fluido, tre armi distinte, una mappa procedurale con ostacoli, un sistema di account con statistiche persistenti, un Battle Pass con skin cosmetiche in tempo reale e supporto completo per dispositivi mobile.
 
 ---
 
@@ -10,6 +10,7 @@ Gioca in lobby da massimo 8 giocatori con movimento fluido, tre armi distinte, u
 
 - [Funzionalità](#funzionalità)
 - [Account e statistiche](#account-e-statistiche)
+- [Battle Pass e cosmetics](#battle-pass-e-cosmetics)
 - [Armi](#armi)
 - [Controlli](#controlli)
 - [Tecnologie](#tecnologie)
@@ -36,6 +37,7 @@ Gioca in lobby da massimo 8 giocatori con movimento fluido, tre armi distinte, u
 - **Barre nere (letterbox)** — mantenimento automatico del rapporto 16:9 su qualsiasi schermo
 - **Rigenerazione HP** — la vita si rigenera automaticamente dopo 4 secondi senza subire danni
 - **60 tick/secondo** — game loop server ottimizzato per bassa latenza
+- **Skin cosmetiche in tempo reale** — i cambi di skin vengono propagati a tutti i giocatori della lobby istantaneamente via socket
 
 ---
 
@@ -66,6 +68,41 @@ Il menu di spawn mostra, se sei loggato:
 - Username, livello e XP totali
 - **TOTALE**: kills e morti cumulativi dell'account con K/D ratio
 - **QUESTA PARTITA**: kills e morti della sessione corrente (visibile solo dopo il primo kill o la prima morte)
+
+### Integrità dei dati — transazioni SQL
+
+L'endpoint `aggiorna_stats.php` usa una **transazione esplicita** per garantire che la validazione del token e l'aggiornamento delle statistiche siano sempre atomici. Se una delle due operazioni fallisce (errore di rete, crash, timeout), viene eseguito un rollback automatico e il database torna allo stato precedente alla chiamata, senza lasciare dati parziali.
+
+---
+
+## Battle Pass e cosmetics
+
+### Panoramica
+
+Il Battle Pass è un sistema di progressione cosmetica che sblocca colori per il personaggio e per l'arma al raggiungimento di determinati livelli. Non influenza il gameplay.
+
+### Reward disponibili
+
+| Livello | Tipo | Nome | Colore |
+|---|---|---|---|
+| 5 | Player | Crimson | Rosso |
+| 10 | Weapon | Cobalt | Blu |
+| 15 | Player | Phantom | Viola |
+| 20 | Weapon | Ember | Arancione |
+| 25 | Player | Neon | Verde neon |
+| 30 | Weapon | Gilded | Oro |
+| 35 | Player | Glacial | Azzurro ghiaccio |
+| 40 | Weapon | Sakura | Rosa |
+| 45 | Player | Prism | 🌈 Rainbow animato |
+| 50 | Player + Weapon | LEGENDARY | 🌈 Rainbow animato (entrambi) |
+
+### Funzionamento
+
+- Le skin sbloccate vengono selezionate dalla schermata Battle Pass accessibile dal menu
+- La scelta viene salvata nel database via `salva_cosmetics.php`
+- Ogni volta che si equipa o desequipa una skin, il client emette l'evento socket `updateCosmetics` al server
+- Il server aggiorna immediatamente l'oggetto player e al tick successivo (~16ms) lo snapshot include già il nuovo colore, visibile a tutti i giocatori della lobby in tempo reale
+- Il giocatore locale legge il colore direttamente da `localStorage` (aggiornamento immediato senza attendere il round-trip server); gli avversari lo ricevono tramite lo snapshot
 
 ---
 
@@ -132,8 +169,8 @@ Il menu di spawn mostra, se sei loggato:
 
 | Tecnologia | Utilizzo |
 |---|---|
-| PHP | API REST per autenticazione e statistiche |
-| MySQL | Database utenti, sessioni e statistiche giocatore |
+| PHP | API REST per autenticazione, statistiche e cosmetics |
+| MySQL | Database utenti, sessioni, statistiche e cosmetics giocatore |
 | nginx | Reverse proxy per routing PHP + Node.js |
 
 ---
@@ -151,21 +188,23 @@ Shooter_Online/
 │   ├── lobby.js                # Schermata selezione/creazione lobby
 │   ├── menu.js                 # Menu di spawn con statistiche account e leaderboard
 │   ├── auth.js                 # Schermata login/registrazione e gestione sessione
+│   ├── battlepass.js           # Battle Pass: reward, equip/unequip skin, sync server in tempo reale
 │   ├── weapons.js              # Rendering armi e animazione pugni
 │   ├── touch.js                # Joystick virtuali e bottoni mobile
 │   ├── audio.js                # Effetti sonori via Web Audio API
 │   └── lib/
 │       └── kaboom.mjs          # Libreria Kaboom.js (bundled, nessuna CDN richiesta)
 ├── server/
-│   └── server.js               # Server completo: lobby, fisica, game loop
+│   └── server.js               # Server completo: lobby, fisica, game loop, handler updateCosmetics
 ├── php/
 │   ├── auth.php                # Endpoint autenticazione centralizzato
 │   ├── login.php               # Login utente (restituisce token + stats)
 │   ├── register.php            # Registrazione nuovo account
 │   ├── logout.php              # Invalidazione sessione e cookie
 │   ├── check_session.php       # Verifica sessione attiva al caricamento
-│   ├── aggiorna_stats.php      # +1 kill oppure +1 morte in tempo reale
+│   ├── aggiorna_stats.php      # +1 kill oppure +1 morte in tempo reale (con transazione SQL)
 │   ├── salva_statistiche.php   # +1 partita al primo spawn della sessione
+│   ├── salva_cosmetics.php     # Salva/legge skin Battle Pass nel DB (POST con transazione SQL)
 │   ├── classifica.php          # Leaderboard globale
 │   └── db.php                  # Connessione PDO al database MySQL
 ├── Dockerfile
@@ -180,12 +219,13 @@ Shooter_Online/
 |---|---|
 | `main.js` | Inizializzazione, connessione socket, injection dipendenze, AJAX kills/morti/partite, rejoin automatico |
 | `state.js` | Stato globale (socket, ID, arma, munizioni, input, zoom camera, dati account) — nessuna dipendenza |
-| `game.js` | Input WASD, sparo, camera Kaboom, applicazione snapshot server, gestione selfKill |
+| `game.js` | Input WASD, sparo, camera Kaboom, applicazione snapshot server, gestione selfKill, rendering skin |
 | `hud.js` | Tutti gli elementi overlay: HP, ammo, stats di sessione, kill feed, leaderboard, minimappa |
 | `lobby.js` | UI di selezione/creazione lobby, gestione eventi Socket.IO del menu principale |
 | `menu.js` | Menu di spawn con stats account (totale + sessione corrente) e accesso alla leaderboard |
 | `auth.js` | Schermata login/registrazione, checkSession, logout, callback post-autenticazione |
-| `weapons.js` | Disegno grafico di armi e mani (solo rendering, nessuna logica di gioco) |
+| `battlepass.js` | Reward cosmetics, equip/unequip skin, salvataggio DB, notifica server via `updateCosmetics` |
+| `weapons.js` | Disegno grafico di armi e mani con colori cosmetici (solo rendering, nessuna logica di gioco) |
 | `touch.js` | Joystick sinistro (movimento) e destro (mira/sparo), bottoni arma e ricarica |
 | `audio.js` | Suoni sintetici per sparo, colpo, kill, pugni e morte |
 
@@ -259,15 +299,16 @@ Client                          Server
   │     └── lobbyList    ◄────── │  Lista lobby aggiornata
   │                               │
   └─── io("/lobby/<id>")          │  Namespace gameplay
-        ├── join         ──────► │  Assegna nickname + token
-        ├── spawn        ──────► │  Posiziona il giocatore in mappa
-        ├── input        ──────► │  Direzione di movimento (WASD)
-        ├── aim          ──────► │  Angolo di mira (radianti)
-        ├── shoot        ──────► │  Sparo / attacco melee
-        ├── setWeapon    ──────► │  Cambio arma
-        ├── reload       ──────► │  Ricarica manuale
-        ├── selfKill     ──────► │  Respawn volontario (ESC hold, non conta come morte)
-        └── state        ◄────── │  Snapshot completo ~60×/sec
+        ├── join           ──────► │  Assegna nickname + token + skin iniziali
+        ├── spawn          ──────► │  Posiziona il giocatore in mappa
+        ├── input          ──────► │  Direzione di movimento (WASD)
+        ├── aim            ──────► │  Angolo di mira (radianti)
+        ├── shoot          ──────► │  Sparo / attacco melee
+        ├── setWeapon      ──────► │  Cambio arma
+        ├── reload         ──────► │  Ricarica manuale
+        ├── selfKill       ──────► │  Respawn volontario (ESC hold, non conta come morte)
+        ├── updateCosmetics ─────► │  Aggiorna skin in tempo reale (propagata a tutti al tick successivo)
+        └── state          ◄────── │  Snapshot completo ~60×/sec (include playerColorId, weaponColorId)
 ```
 
 ### Game loop server (60 tick/sec)
@@ -278,16 +319,25 @@ Ad ogni tick il server:
 3. Risolve le **collisioni** con i bordi mappa e gli ostacoli solidi (push-out circolare)
 4. Gestisce la **rigenerazione HP** (4s dopo l'ultimo colpo subito, +8 HP/s)
 5. Muove i **proiettili** e testa le collisioni con ostacoli e giocatori
-6. Emette lo **snapshot di stato** a tutti i client della lobby
+6. Emette lo **snapshot di stato** a tutti i client della lobby (include colori cosmetici di ogni giocatore)
 
 ### Sistema di statistiche
 
 Le statistiche vengono salvate in tempo reale via AJAX al verificarsi dell'evento, senza attendere la disconnessione:
 
-- `aggiorna_stats.php` → chiamato su ogni kill o morte reale (+1 kill o +1 morte)
+- `aggiorna_stats.php` → chiamato su ogni kill o morte reale (+1 kill o +1 morte) — usa transazione SQL
 - `salva_statistiche.php` → chiamato al primo spawn della sessione (+1 partita, +2 XP)
 
 Il **selfKill** (ESC hold) non invia nessuna chiamata AJAX: il flag `selfKillPending` sul client intercetta la morte nel snapshot successivo e la scarta silenziosamente.
+
+### Sistema cosmetics in tempo reale
+
+Quando un giocatore equipaggia o desequipa una skin:
+1. `battlepass.js` aggiorna `localStorage` (effetto immediato sul giocatore locale)
+2. Emette `updateCosmetics` al server con i nuovi `playerColorId` e `weaponColorId`
+3. Il server aggiorna l'oggetto player nel suo stato interno
+4. Al tick successivo (~16ms) lo snapshot include già i nuovi colori
+5. Tutti i client della lobby applicano il colore al rendering del giocatore interessato
 
 ### Sistema di rejoin
 
