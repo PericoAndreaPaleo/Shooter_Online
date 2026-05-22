@@ -40,6 +40,32 @@ export function initAuth(callback) {
 }
 
 // ============================================================
+// ============================================================
+// HELPER COSMETICS
+// ============================================================
+
+/**
+ * Scrive i cosmetics ricevuti dal server nel localStorage.
+ * Chiamato dopo ogni login/checkSession riuscito.
+ * Garantisce che cambiare account resetti le skin.
+ */
+function applyCosmeticsFromServer(userData) {
+    if (userData.player_color_id !== undefined) {
+        if (userData.player_color_id) {
+            localStorage.setItem("bp_player_color", userData.player_color_id);
+        } else {
+            localStorage.removeItem("bp_player_color");
+        }
+    }
+    if (userData.weapon_color_id !== undefined) {
+        if (userData.weapon_color_id) {
+            localStorage.setItem("bp_weapon_color", userData.weapon_color_id);
+        } else {
+            localStorage.removeItem("bp_weapon_color");
+        }
+    }
+}
+
 // CHECK SESSIONE ESISTENTE
 // Legge il token da localStorage e lo verifica sul server PHP.
 // ============================================================
@@ -60,12 +86,19 @@ export async function checkSession() {
         });
         if (res.ok) {
             const data = await res.json();
-            if (data.ok) return data.user;
+            if (data.ok) {
+                // Carica i cosmetics dell'account nel localStorage
+                // (sovrascrive quelli di un eventuale account precedente)
+                applyCosmeticsFromServer(data.user);
+                return data.user;
+            }
         }
     } catch (_) {}
 
-    // Token non valido o scaduto: pulisci localStorage
+    // Token non valido o scaduto: pulisci tutto
     localStorage.removeItem("auth_token");
+    localStorage.removeItem("bp_player_color");
+    localStorage.removeItem("bp_weapon_color");
     return null;
 }
 
@@ -85,7 +118,10 @@ export async function logout() {
             body:    JSON.stringify({ token }),
         }).catch(() => {});
     }
+    // Rimuovi token e cosmetics dal localStorage
     localStorage.removeItem("auth_token");
+    localStorage.removeItem("bp_player_color");
+    localStorage.removeItem("bp_weapon_color");
 }
 
 // ============================================================
@@ -288,8 +324,9 @@ export function mostraSchermataAuth(errorMsg = "") {
                 const data = await res.json();
 
                 if (data.ok) {
-                    // Salva il token in localStorage
+                    // Salva token e carica cosmetics dell'account
                     localStorage.setItem("auth_token", data.token);
+                    applyCosmeticsFromServer(data);
                     rimuoviSchermataAuth();
                     if (onAuthSuccess) onAuthSuccess(data);
                 } else {

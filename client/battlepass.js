@@ -11,6 +11,28 @@
 
 import { state, calcolaLetterbox } from "./state.js";
 
+const PHP_BASE = "/php";
+
+/**
+ * Salva le skin selezionate nel DB via AJAX.
+ * Chiamato ogni volta che l'utente equipa/desequipa una skin.
+ * Non blocca la UI (fire-and-forget con catch silenzioso).
+ */
+function saveCosmeticsToServer() {
+    const token = localStorage.getItem("auth_token");
+    if (!token) return; // ospite: non salvare
+    fetch(`${PHP_BASE}/salva_cosmetics.php`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            token,
+            player_color_id: localStorage.getItem("bp_player_color") || "",
+            weapon_color_id: localStorage.getItem("bp_weapon_color") || "",
+        }),
+    }).catch(() => {}); // ignora errori di rete
+}
+
+
 // ============================================================
 // DEFINIZIONE REWARDS
 // ============================================================
@@ -331,6 +353,7 @@ export function mostraBattlePass(parentContainer) {
 
             card.addEventListener("click", () => {
                 toggleReward(reward);
+                saveCosmeticsToServer();
                 rebuildGrid();
             });
         }
