@@ -131,8 +131,18 @@ export function creaGunDrawObj() {
                     const perpDir  = { x: -sinAngle, y: cosAngle }; // perpendicolare (90°)
 
                     const isLocal    = (playerId === state.myId);
-                    const skinColor  = isLocal ? (getSkinCssColor()   || null) : null;
-                    const weapColor  = isLocal ? (getWeaponCssColor() || null) : null;
+                    // Per il giocatore locale leggi da localStorage (aggiornato in tempo reale);
+                    // per gli avversari usa il colore ricevuto dal server nello snapshot.
+                    const skinColorId   = isLocal ? getPlayerColorId()  : (playerData.playerColorId || null);
+                    const weapColorId   = isLocal ? getWeaponColorId()  : (playerData.weaponColorId || null);
+                    const skinReward    = skinColorId ? getReward(skinColorId) : null;
+                    const weapReward    = weapColorId ? getReward(weapColorId) : null;
+                    const skinColor     = skinReward
+                        ? (skinReward.rainbow ? getRainbowColor(0)  : skinReward.color)
+                        : null;
+                    const weapColor     = weapReward
+                        ? (weapReward.rainbow ? getRainbowColor(60) : weapReward.color)
+                        : null;
 
                     // ── Helper: disegna una mano (cerchio con bordo) ─────────────
                     const drawHand = (handX, handY, radius) => {

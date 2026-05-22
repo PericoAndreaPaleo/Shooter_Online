@@ -2,14 +2,18 @@
 // ============================================================
 // check_session.php — Verifica sessione esistente
 //
-// Legge il token da: $_SESSION > cookie > body POST
+// Legge il token da: body POST > cookie > $_SESSION
 // Risponde con: { ok: true, user: { ... } } oppure { error }
 //
-// FIX: usa SOLO il token DB come fonte di verità.
-//      $_SESSION non viene usata per la validazione (ogni tab
-//      ha una sessione PHP diversa — causerebbe logout random).
-//      Il token viene prorogato automaticamente se mancano
-//      meno di 7 giorni alla scadenza (rolling window 30gg).
+// FIX SESSIONI: usa SOLO il token DB come fonte di verità.
+//   $_SESSION non viene usata per la validazione (ogni tab
+//   ha una sessione PHP diversa — causerebbe logout random).
+//   Il token viene prorogato automaticamente se mancano
+//   meno di 7 giorni alla scadenza (rolling window 30gg).
+//
+//   PULIZIA AUTOMATICA: ogni chiamata a check_session elimina
+//   le sessioni scadute dell'utente corrente, così il DB non
+//   cresce indefinitamente anche senza nuovi login.
 // ============================================================
 
 require_once 'db.php';
@@ -25,9 +29,9 @@ session_start();
 // Determina il token (localStorage via POST > cookie > sessione PHP)
 $token = '';
 $bodyData = json_decode(file_get_contents('php://input'), true);
-if (!empty($bodyData['token']))       $token = trim($bodyData['token']);
+if (!empty($bodyData['token']))         $token = trim($bodyData['token']);
 elseif (!empty($_COOKIE['auth_token'])) $token = trim($_COOKIE['auth_token']);
-elseif (!empty($_SESSION['token']))   $token = trim($_SESSION['token']);
+elseif (!empty($_SESSION['token']))     $token = trim($_SESSION['token']);
 
 if (!$token) {
     http_response_code(400);
@@ -59,18 +63,22 @@ try {
         exit;
     }
 
+    // ── Pulizia sessioni scadute (opportunistica) ────────────────
+    // Elimina le sessioni scadute di questo utente ad ogni check.
+    // Operazione leggera: usa l'indice su utente_id + scade_il.
+    $pdo->prepare('DELETE FROM sessioni WHERE utente_id = ? AND scade_il <= NOW()')
+        ->execute([$session['utente_id']]);
+    // ─────────────────────────────────────────────────────────────
+
     // Rolling window: se mancano meno di 7 giorni alla scadenza, proroga a 30gg
-    $scadeIl    = new DateTime($session['scade_il']);
-    $ora        = new DateTime();
-    $diff       = $ora->diff($scadeIl);
-    $giorniRima = $diff->days + ($diff->invert ? 0 : 0);
+    $scadeIl = new DateTime($session['scade_il']);
+    $ora     = new DateTime();
     if ($scadeIl > $ora && ($scadeIl->getTimestamp() - $ora->getTimestamp()) < 7 * 86400) {
         $nuovaScadenza = date('Y-m-d H:i:s', strtotime('+30 days'));
         $upd = $pdo->prepare('UPDATE sessioni SET scade_il = ? WHERE token = ?');
         $upd->execute([$nuovaScadenza, $token]);
-        // Aggiorna il cookie con la nuova scadenza
-        setcookie('auth_token',    $token,                    time() + (30 * 24 * 3600), '/', '', true, true);
-        setcookie('auth_username', $session['username'],      time() + (30 * 24 * 3600), '/', '', true, true);
+        setcookie('auth_token',    $token,                time() + (30 * 24 * 3600), '/', '', true, true);
+        setcookie('auth_username', $session['username'], time() + (30 * 24 * 3600), '/', '', true, true);
     }
 
     // Leggi statistiche

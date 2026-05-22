@@ -413,6 +413,10 @@ function createLobby(lobbyId, lobbyName, password) {
                 nickname = (data && data.username) ? data.username : generateNickname();
             }
 
+            // Leggi colori cosmetici inviati dal client al join
+            const playerColorId = (data && data.playerColorId) ? String(data.playerColorId).slice(0, 32) : null;
+            const weaponColorId = (data && data.weaponColorId) ? String(data.weaponColorId).slice(0, 32) : null;
+
 
             // Assegna token al socket per il futuro rejoin
             const newToken = crypto.randomBytes(16).toString("hex");
@@ -432,6 +436,8 @@ function createLobby(lobbyId, lobbyName, password) {
                 lastHitTime: 0,
                 weapon:     "gun",
                 punchCount: 0,                 // contatore pugni (per animazione mani)
+                playerColorId,                 // skin Battle Pass player
+                weaponColorId,                 // skin Battle Pass arma
             };
 
             // Inizializza voce in classifica
@@ -915,6 +921,8 @@ setInterval(() => {
                 punchCount: player.punchCount || 0,
                 punchHand:  player.punchHand  || 0,
                 ammo:       player.ammo || { gun: MAX_AMMO.gun, pistol: MAX_AMMO.pistol },
+                playerColorId: player.playerColorId || null,
+                weaponColorId: player.weaponColorId || null,
             };
         }
 

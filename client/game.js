@@ -707,32 +707,37 @@ export function aggiornaStato(serverSnapshot, canvas) {
                 if (localPlayerData.hpBar) localPlayerData.hpBar.hidden = false;
 
                 // Aggiorna colore player con cosmetic Battle Pass (ogni frame, supporta rainbow)
-                if (isLocalPlayer && !serverPlayerData.hitFlash) {
-                    const pid = getPlayerColorId();
+                // Usa il colore ricevuto dal server per TUTTI i giocatori (locale + avversari)
+                if (!serverPlayerData.hitFlash) {
+                    // Per il giocatore locale leggi da localStorage (aggiornato in tempo reale
+                    // dalla UI del Battle Pass); per gli altri usa il valore nello snapshot.
+                    const pid = isLocalPlayer
+                        ? getPlayerColorId()
+                        : (serverPlayerData.playerColorId || null);
+
                     if (pid) {
                         const rew = getReward(pid);
                         if (rew) {
                             if (rew.rainbow) {
+                                // Colore animato: aggiornato ogni frame per chi lo ha
                                 const c = getRainbowColor(0);
                                 const m = c.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
                                 if (m) localPlayerData.sprite.color = rgb(+m[1], +m[2], +m[3]);
                             } else {
+                                // Colore statico: scrittura solo quando cambia
                                 const m = rew.color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
-                                if (m && !localPlayerData._cosmeticSet) {
-                                    localPlayerData.sprite.color = rgb(+m[1], +m[2], +m[3]);
-                                    localPlayerData._cosmeticSet = pid; // evita scritture continue per i non-rainbow
-                                } else if (m && localPlayerData._cosmeticSet !== pid) {
+                                if (m && localPlayerData._cosmeticSet !== pid) {
                                     localPlayerData.sprite.color = rgb(+m[1], +m[2], +m[3]);
                                     localPlayerData._cosmeticSet = pid;
                                 }
                             }
-                        } else {
-                            if (localPlayerData._cosmeticSet) {
-                                localPlayerData.sprite.color = rgb(222, 196, 145);
-                                localPlayerData._cosmeticSet = null;
-                            }
+                        } else if (localPlayerData._cosmeticSet) {
+                            // Reward non trovato: ripristina colore default
+                            localPlayerData.sprite.color = rgb(222, 196, 145);
+                            localPlayerData._cosmeticSet = null;
                         }
                     } else if (localPlayerData._cosmeticSet) {
+                        // Nessuna skin equipaggiata: colore default
                         localPlayerData.sprite.color = rgb(222, 196, 145);
                         localPlayerData._cosmeticSet = null;
                     }
@@ -742,10 +747,12 @@ export function aggiornaStato(serverSnapshot, canvas) {
                 if (serverPlayerData.hitFlash) {
                     localPlayerData.sprite.color = rgb(255, 255, 255);
                     if (isLocalPlayer) playHitSound();
-                    // Dopo il flash torna al colore cosmetico (non piu' default pelle)
+                    // Dopo il flash torna al colore cosmetico del giocatore (locale o avversario)
                     setTimeout(() => {
                         if (!localPlayerData.sprite) return;
-                        const pid2 = getPlayerColorId();
+                        const pid2 = isLocalPlayer
+                            ? getPlayerColorId()
+                            : (serverPlayerData.playerColorId || null);
                         const rew2 = pid2 ? getReward(pid2) : null;
                         if (rew2 && !rew2.rainbow) {
                             const m2 = rew2.color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);

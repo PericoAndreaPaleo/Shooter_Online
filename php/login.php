@@ -6,6 +6,12 @@
 // Risponde con JSON: { ok: true, token, username, livello,
 //                      xp, kills_totali, morti_totali,
 //                      player_color_id, weapon_color_id }
+//
+// FIX SESSIONI: al login vengono eliminate tutte le sessioni
+// scadute dell'utente, e vengono mantenute al massimo
+// MAX_SESSIONI_ATTIVE sessioni valide (le più recenti).
+// Questo evita l'accumulo illimitato di righe per lo stesso
+// account (prima era possibile avere 120+ sessioni attive).
 // ============================================================
 
 require_once 'db.php';
@@ -17,6 +23,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 header('Content-Type: application/json');
 
 session_start();
+
+// Numero massimo di sessioni attive contemporanee per utente.
+// Se l'utente ne ha già MAX_SESSIONI_ATTIVE valide, la più
+// vecchia viene eliminata prima di crearne una nuova.
+const MAX_SESSIONI_ATTIVE = 3;
 
 $data     = json_decode(file_get_contents('php://input'), true);
 $username = trim($data['username'] ?? '');
@@ -40,6 +51,31 @@ try {
         echo json_encode(['error' => 'Invalid credentials.']);
         exit;
     }
+
+    // ── Pulizia sessioni ────────────────────────────────────────
+    // 1. Elimina tutte le sessioni scadute di questo utente
+    $pdo->prepare('DELETE FROM sessioni WHERE utente_id = ? AND scade_il <= NOW()')
+        ->execute([$user['id']]);
+
+    // 2. Se ci sono ancora troppe sessioni valide, elimina le più vecchie
+    //    (mantieni solo le MAX_SESSIONI_ATTIVE - 1 più recenti,
+    //     così c'è posto per quella nuova che stiamo per creare)
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM sessioni WHERE utente_id = ? AND scade_il > NOW()');
+    $stmt->execute([$user['id']]);
+    $sessioniAttive = (int)$stmt->fetchColumn();
+
+    if ($sessioniAttive >= MAX_SESSIONI_ATTIVE) {
+        // Quante ne dobbiamo eliminare per fare posto a quella nuova
+        $daEliminare = $sessioniAttive - MAX_SESSIONI_ATTIVE + 1;
+        // Elimina le più vecchie (ORDER BY scade_il ASC → prima le più prossime a scadere)
+        $pdo->prepare(
+            'DELETE FROM sessioni
+             WHERE utente_id = ? AND scade_il > NOW()
+             ORDER BY scade_il ASC
+             LIMIT ' . (int)$daEliminare
+        )->execute([$user['id']]);
+    }
+    // ────────────────────────────────────────────────────────────
 
     // Genera token (64 char hex = 32 bytes)
     $token   = bin2hex(random_bytes(32));
