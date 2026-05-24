@@ -170,29 +170,49 @@ export async function checkSession() {
     const token = localStorage.getItem("auth_token");
     if (!token) return null; // nessun token salvato → non loggato
 
-    try {
-        const res  = await fetch(`${PHP_BASE}/check_session.php`, {
-            method:  "POST",
-            headers: { "Content-Type": "application/json" },
-            body:    JSON.stringify({ token }),
-        });
-        if (res.ok) {
-            const data = await res.json();
-            if (data.ok) {
-                // Sessione valida: applica i cosmetics e avvia il polling
-                applyCosmeticsFromServer(data.user);
-                avviaSessionPoll(); // ← inizia il monitoraggio in background
-                return data.user;
+    // Tenta la verifica con un retry automatico in caso di errore di rete
+    for (let tentativo = 0; tentativo < 2; tentativo++) {
+        try {
+            const res  = await fetch(`${PHP_BASE}/check_session.php`, {
+                method:  "POST",
+                headers: { "Content-Type": "application/json" },
+                body:    JSON.stringify({ token }),
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                if (data.ok) {
+                    // Sessione valida: applica i cosmetics e avvia il polling
+                    applyCosmeticsFromServer(data.user);
+                    avviaSessionPoll(); // ← inizia il monitoraggio in background
+                    return data.user;
+                }
+                // Il server ha risposto con un errore esplicito (token scaduto,
+                // sessione rimpiazzata, ecc.): pulisci e non riprovare.
+                localStorage.removeItem("auth_token");
+                localStorage.removeItem("bp_player_color");
+                localStorage.removeItem("bp_weapon_color");
+                return null;
             }
+            // HTTP error (5xx, ecc.): ritenta se è il primo tentativo
+            if (tentativo === 0) {
+                await new Promise(r => setTimeout(r, 1500)); // attendi 1.5s prima di riprovare
+                continue;
+            }
+        } catch (_) {
+            // Errore di rete: ritenta se è il primo tentativo,
+            // altrimenti NON cancellare il token — potrebbe essere
+            // un problema temporaneo di connettività.
+            if (tentativo === 0) {
+                await new Promise(r => setTimeout(r, 1500));
+                continue;
+            }
+            // Secondo tentativo fallito per rete: conserva il token,
+            // mostra il login così l'utente può riprovare manualmente.
+            return null;
         }
-    } catch (_) {
-        // Errore di rete: tratta come sessione non valida
     }
 
-    // Token non valido o scaduto: pulisci tutto dal localStorage
-    localStorage.removeItem("auth_token");
-    localStorage.removeItem("bp_player_color");
-    localStorage.removeItem("bp_weapon_color");
     return null;
 }
 

@@ -22,8 +22,12 @@ import kaboom from "./lib/kaboom.mjs";
 // Kaboom può avere problemi su hot-reload; questo assicura
 // un ambiente pulito alla prima visita della pagina.
 // ============================================================
-if (!sessionStorage.getItem("reloaded")) {
-    sessionStorage.setItem("reloaded", "1");
+// Auto-reload al primo caricamento: usa localStorage con timestamp
+// così sopravvive alla chiusura del browser (sessionStorage si azzera).
+// Il reload è considerato "fresco" se è avvenuto negli ultimi 5 secondi.
+const _lastReload = parseInt(localStorage.getItem("kaboom_reloaded") || "0", 10);
+if (Date.now() - _lastReload > 5000) {
+    localStorage.setItem("kaboom_reloaded", String(Date.now()));
     location.reload();
 }
 
