@@ -258,7 +258,7 @@ function chiediCookieConsent(scale) {
         `;
 
         const icon = document.createElement("div");
-        icon.textContent = "🍪";
+        icon.textContent = "";
         icon.style.fontSize = `${Math.round(28 * scale)}px`;
 
         const textWrap = document.createElement("div");
@@ -471,8 +471,8 @@ export async function mostraSchermataAuth(errorMsg = "") {
     // Link per cambiare preferenze cookie
     const cookieLink = document.createElement("div");
     const consentLabel = getCookieConsent() === "accepted"
-        ? "🍪 Cookies accepted — change preference"
-        : "🍪 Cookies declined — change preference";
+        ? "Cookies accepted — change preference"
+        : "Cookies declined — change preference";
     cookieLink.textContent = consentLabel;
     cookieLink.style.cssText = `
         font-size:   ${Math.round(11 * scale)}px;
