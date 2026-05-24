@@ -9,39 +9,24 @@
 //   5. Connessione al server Socket.IO
 //   6. Connessione al namespace di una lobby specifica
 //   7. Tentativo di rejoin automatico all'avvio (se c'è una sessione salvata)
-//
-// NOTA: il ricaricamento automatico in cima serve per garantire
-// che Kaboom parta sempre da un contesto fresco (evita bug di
-// re-inizializzazione in alcuni browser).
 // ============================================================
 
 import kaboom from "./lib/kaboom.mjs";
-
-// ============================================================
-// AUTO-RELOAD AL PRIMO CARICAMENTO
-// Kaboom può avere problemi su hot-reload; questo assicura
-// un ambiente pulito alla prima visita della pagina.
-// ============================================================
-// Auto-reload al primo caricamento: usa localStorage con timestamp
-// così sopravvive alla chiusura del browser (sessionStorage si azzera).
-// Il reload è considerato "fresco" se è avvenuto negli ultimi 5 secondi.
-const _lastReload = parseInt(localStorage.getItem("kaboom_reloaded") || "0", 10);
-if (Date.now() - _lastReload > 5000) {
-    localStorage.setItem("kaboom_reloaded", String(Date.now()));
-    location.reload();
-}
 
 // ============================================================
 // INIZIALIZZAZIONE KABOOM
 // Deve avvenire PRIMA di qualsiasi import che usi funzioni Kaboom
 // (add, pos, rect, camPos…), poiché kaboom() le registra su
 // globalThis in modo sincrono.
+//
+// NON passiamo width/height fissi: senza di essi Kaboom usa
+// offsetWidth/offsetHeight del parent (body = 100vw x 100vh)
+// e gestisce internamente il resize della finestra, evitando
+// il problema del canvas che non copre tutto lo schermo.
 // ============================================================
 kaboom({
-    width:               window.innerWidth,
-    height:              window.innerHeight,
-    clearColor:          [0, 0, 0, 1],
-    preventPauseOnBlur:  true, // il gioco non si ferma quando perdi il focus
+    clearColor:         [0, 0, 0, 1],
+    preventPauseOnBlur: true, // il gioco non si ferma quando perdi il focus
 });
 
 // Cursore a mirino sul canvas di gioco
@@ -170,8 +155,14 @@ import { checkSession, initAuth, mostraSchermataAuth, logout } from "./auth.js";
 /** Calcola e imposta lo zoom iniziale della camera */
 state.CAM_ZOOM = calcolaZoom();
 
-/** Aggiorna lo zoom ad ogni resize della finestra */
-window.addEventListener("resize", () => { state.CAM_ZOOM = calcolaZoom(); });
+/** Aggiorna zoom e overlay canvas ad ogni resize della finestra */
+window.addEventListener("resize", () => {
+    state.CAM_ZOOM = calcolaZoom();
+    // Kaboom gestisce da solo il resize del suo canvas.
+    // Aggiorniamo solo l'overlay trasparente.
+    overlayCanvas.width  = window.innerWidth;
+    overlayCanvas.height = window.innerHeight;
+});
 
 // ============================================================
 // UI LAYER — GESTIONE CENTRALIZZATA

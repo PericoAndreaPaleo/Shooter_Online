@@ -245,20 +245,16 @@ function chiediCookieConsent(scale) {
         banner.id = "cookie-banner";
         banner.style.cssText = `
             position:        fixed;
-            bottom:          0;
-            left:            0;
-            right:           0;
-            background:      rgba(10, 18, 10, 0.97);
-            border-top:      1px solid rgba(0, 255, 100, 0.25);
-            padding:         ${Math.round(18 * scale)}px ${Math.round(28 * scale)}px;
+            inset:           0;
+            background:      rgba(5, 10, 5, 0.97);
             display:         flex;
             flex-direction:  column;
             align-items:     center;
-            gap:             ${Math.round(14 * scale)}px;
+            justify-content: center;
+            gap:             ${Math.round(20 * scale)}px;
             z-index:         999999;
             font-family:     monospace;
             color:           rgba(255,255,255,0.85);
-            box-shadow:      0 -4px 24px rgba(0,0,0,0.5);
         `;
 
         const icon = document.createElement("div");
