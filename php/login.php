@@ -12,6 +12,9 @@
 // Questo garantisce che un account possa essere usato da un
 // solo dispositivo/tab alla volta: il login su un nuovo device
 // disconnette automaticamente tutti gli altri.
+//
+// DURATA SESSIONE: 5 minuti (per test).
+// Cambia strtotime('+5 minutes') con '+30 days' per produzione.
 // ============================================================
 
 require_once 'db.php';
@@ -59,11 +62,11 @@ try {
     // ────────────────────────────────────────────────────────────
 
     // Genera un token sicuro (64 char hex = 32 byte random)
-    $token   = bin2hex(random_bytes(32));
+    $token = bin2hex(random_bytes(32));
 
-    // La sessione dura 30 giorni; viene prorogata automaticamente
-    // da check_session.php se mancano meno di 7 giorni alla scadenza.
-    $scadeIl = date('Y-m-d H:i:s', strtotime('+30 days'));
+    // Sessione da 5 minuti (per test).
+    // Per produzione sostituire con: strtotime('+30 days')
+    $scadeIl = date('Y-m-d H:i:s', strtotime('+5 minutes'));
 
     // Inserisce la nuova sessione (unica) nel DB
     $stmt = $pdo->prepare('INSERT INTO sessioni (token, utente_id, scade_il) VALUES (?, ?, ?)');
@@ -90,9 +93,10 @@ try {
     $_SESSION['username'] = $username;
     $_SESSION['token']    = $token;
 
-    // Cookie di 30 giorni (utile per auth.php se visitato direttamente)
-    setcookie('auth_token',    $token,    time() + (30 * 24 * 3600), '/', '', true, true);
-    setcookie('auth_username', $username, time() + (30 * 24 * 3600), '/', '', true, true);
+    // Cookie di 5 minuti (solo se l'utente ha accettato i cookie — gestito lato client).
+    // Per produzione sostituire 300 con (30 * 24 * 3600).
+    setcookie('auth_token',    $token,    time() + 300, '/', '', true, true);
+    setcookie('auth_username', $username, time() + 300, '/', '', true, true);
 
     echo json_encode([
         'ok'              => true,
@@ -105,6 +109,7 @@ try {
         'morti_totali'    => $stats['morti_totali'] ?? 0,
         'player_color_id' => $cosmetics['player_color_id'] ?? null,
         'weapon_color_id' => $cosmetics['weapon_color_id'] ?? null,
+        'session_expires' => $scadeIl,
     ]);
 
 } catch (Exception $e) {

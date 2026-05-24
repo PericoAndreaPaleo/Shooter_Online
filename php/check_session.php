@@ -16,8 +16,9 @@
 // speciale che auth.js usa per mostrare il messaggio corretto
 // ("Hai effettuato l'accesso da un altro dispositivo").
 //
-// ROLLING WINDOW: se mancano meno di 7 giorni alla scadenza,
-// il token viene prorogato automaticamente a 30 giorni.
+// ROLLING WINDOW: se mancano meno di 2 minuti alla scadenza
+// (su 5 totali), il token viene prorogato automaticamente di
+// altri 5 minuti. In produzione con 30 giorni, soglia = 7 giorni.
 //
 // PULIZIA: ogni chiamata elimina le sessioni scadute
 // dell'utente corrente per tenere il DB pulito.
@@ -67,17 +68,19 @@ try {
         setcookie('auth_username', '', time() - 3600, '/', '', true, true);
         http_response_code(401);
         echo json_encode([
-            'error'  => 'session_replaced',
-            'message'=> 'Your account has been logged in from another device. You have been disconnected.'
+            'error'   => 'session_replaced',
+            'message' => 'Your account has been logged in from another device. You have been disconnected.'
         ]);
         exit;
     }
 
     // Il token esiste ma potrebbe essere scaduto per il normale timeout
-    $now    = new DateTime();
+    $now     = new DateTime();
     $scadeIl = new DateTime($anyRow['scade_il']);
     if ($scadeIl <= $now) {
-        // Scaduto per timeout normale (non per sessione unica)
+        // Scaduto per timeout normale (non per sessione unica):
+        // elimina il token dal DB e pulisci.
+        $pdo->prepare('DELETE FROM sessioni WHERE token = ?')->execute([$token]);
         $_SESSION = [];
         session_destroy();
         setcookie('auth_token',    '', time() - 3600, '/', '', true, true);
@@ -95,13 +98,15 @@ try {
     $pdo->prepare('DELETE FROM sessioni WHERE utente_id = ? AND scade_il <= NOW()')
         ->execute([$session['utente_id']]);
 
-    // Rolling window: proroga il token se mancano meno di 7 giorni
-    if (($scadeIl->getTimestamp() - $now->getTimestamp()) < 7 * 86400) {
-        $nuovaScadenza = date('Y-m-d H:i:s', strtotime('+30 days'));
+    // Rolling window: proroga il token se mancano meno di 2 minuti (su 5).
+    // Per produzione con 30 giorni, usare: 7 * 86400 e strtotime('+30 days').
+    if (($scadeIl->getTimestamp() - $now->getTimestamp()) < 120) {
+        $nuovaScadenza = date('Y-m-d H:i:s', strtotime('+5 minutes'));
         $pdo->prepare('UPDATE sessioni SET scade_il = ? WHERE token = ?')
             ->execute([$nuovaScadenza, $token]);
-        setcookie('auth_token',             $token,                time() + (30 * 24 * 3600), '/', '', true, true);
-        setcookie('auth_username', $session['username'], time() + (30 * 24 * 3600), '/', '', true, true);
+        setcookie('auth_token',    $token,             time() + 300, '/', '', true, true);
+        setcookie('auth_username', $session['username'], time() + 300, '/', '', true, true);
+        $scadeIl = new DateTime($nuovaScadenza);
     }
 
     // Leggi statistiche (con lock condiviso per consistenza)
@@ -134,7 +139,11 @@ try {
     echo json_encode([
         'ok'   => true,
         'user' => array_merge(
-            ['utente_id' => $session['utente_id'], 'username' => $session['username']],
+            [
+                'utente_id'       => $session['utente_id'],
+                'username'        => $session['username'],
+                'session_expires' => $scadeIl->format('Y-m-d H:i:s'),
+            ],
             $stats     ?: [],
             [
                 'player_color_id' => $cosmetics['player_color_id'] ?? null,
