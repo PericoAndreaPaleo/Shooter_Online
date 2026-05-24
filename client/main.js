@@ -468,6 +468,17 @@ function avvioGioco(userData) {
         // Entrambi login.php e check_session.php usano kills_totali / morti_totali
         state.accountKills    = userData.kills_totali || 0;
         state.accountMorti    = userData.morti_totali || 0;
+        // Le skin vengono già impostate in localStorage da applyCosmeticsFromServer
+        // (chiamata in checkSession/login): niente da fare qui
+    } else {
+        // Ospite: resetta tutti i dati account e le skin
+        state.accountUsername = null;
+        state.accountLivello  = 1;
+        state.accountXp       = 0;
+        state.accountKills    = 0;
+        state.accountMorti    = 0;
+        localStorage.removeItem("bp_player_color");
+        localStorage.removeItem("bp_weapon_color");
     }
     // ─────────────────────────────────────────────────────────────
 

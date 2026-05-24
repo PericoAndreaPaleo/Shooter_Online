@@ -525,6 +525,9 @@ export async function mostraSchermataAuth(errorMsg = "") {
     });
 
     btnOspite.addEventListener("click", () => {
+        // Ospite: nessuna skin, nessun account → pulisci tutto
+        localStorage.removeItem("bp_player_color");
+        localStorage.removeItem("bp_weapon_color");
         rimuoviSchermataAuth();
         if (onAuthSuccess) onAuthSuccess(null);
     });
