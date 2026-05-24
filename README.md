@@ -15,7 +15,9 @@ Gioca in lobby da massimo 8 giocatori con movimento fluido, tre armi distinte, u
 - [Controlli](#controlli)
 - [Tecnologie](#tecnologie)
 - [Struttura del progetto](#struttura-del-progetto)
+- [Database](#database)
 - [Avvio rapido](#avvio-rapido)
+- [Deploy con Docker](#deploy-con-docker)
 - [Deploy su Render](#deploy-su-render)
 - [Architettura](#architettura)
 
@@ -160,18 +162,19 @@ Il Battle Pass è un sistema di progressione cosmetica che sblocca colori per il
 
 | Tecnologia | Utilizzo |
 |---|---|
-| [Node.js](https://nodejs.org/) | Runtime server-side |
-| [Express](https://expressjs.com/) | Serving dei file statici del client |
-| [Socket.IO](https://socket.io/) (server) | Namespace dedicati per ogni lobby |
+| [Node.js](https://nodejs.org/) v20 | Runtime server-side |
+| [Express](https://expressjs.com/) ^4.18 | Serving dei file statici del client |
+| [Socket.IO](https://socket.io/) ^4.7 (server) | Namespace dedicati per ogni lobby |
 | `crypto` (built-in) | Generazione token di rejoin e ID lobby |
 
 ### Backend / Persistenza
 
 | Tecnologia | Utilizzo |
 |---|---|
-| PHP | API REST per autenticazione, statistiche e cosmetics |
-| MySQL | Database utenti, sessioni, statistiche e cosmetics giocatore |
-| nginx | Reverse proxy per routing PHP + Node.js |
+| PHP 8.2 | API REST per autenticazione, statistiche e cosmetics |
+| MySQL 8.0 | Database utenti, sessioni, statistiche e cosmetics giocatore |
+| Apache 2 | Server PHP (porta interna 8080) |
+| nginx | Reverse proxy: instrada `/php/` verso Apache, tutto il resto verso Node.js |
 
 ---
 
@@ -207,8 +210,9 @@ Shooter_Online/
 │   ├── salva_cosmetics.php     # Salva/legge skin Battle Pass nel DB (POST con transazione SQL)
 │   ├── classifica.php          # Leaderboard globale
 │   └── db.php                  # Connessione PDO al database MySQL
-├── Dockerfile
-├── nginx.conf
+├── Dockerfile                  # Build immagine: PHP 8.2 + Apache + Node.js 20 + nginx
+├── nginx.conf                  # Reverse proxy: porta 10000 → Apache :8080 / Node :4000
+├── start.sh                    # Script di avvio: Apache + Node.js + nginx
 ├── package.json
 └── README.md
 ```
@@ -231,12 +235,66 @@ Shooter_Online/
 
 ---
 
+## Database
+
+Schema MySQL con 4 tabelle. Il file di dump è `bfeokmrnutfoddieljtb.sql`.
+
+### Tabelle
+
+#### `utenti`
+| Campo | Tipo | Note |
+|---|---|---|
+| `id` | int AUTO_INCREMENT | Primary key |
+| `username` | varchar(30) | Unico |
+| `email` | varchar(100) | Unica |
+| `password_hash` | varchar(255) | bcrypt (`$2y$10$...`) |
+| `creato_il` | datetime | Default: NOW() |
+| `ultimo_accesso` | datetime | Default: NOW() |
+
+#### `sessioni`
+| Campo | Tipo | Note |
+|---|---|---|
+| `token` | varchar(64) | Primary key (hash hex) |
+| `utente_id` | int | FK → `utenti.id` CASCADE DELETE |
+| `scade_il` | datetime | Scadenza sessione |
+| `ip` | varchar(45) | IP del client (nullable) |
+
+#### `statistiche_giocatore`
+| Campo | Tipo | Note |
+|---|---|---|
+| `utente_id` | int | PK + FK → `utenti.id` CASCADE DELETE |
+| `kills_totali` | int | Default: 0 |
+| `morti_totali` | int | Default: 0 |
+| `partite` | int | Default: 0 |
+| `xp` | int | Default: 0 |
+| `livello` | int | Default: 1 |
+
+#### `cosmetics_giocatore`
+| Campo | Tipo | Note |
+|---|---|---|
+| `utente_id` | int | PK + FK → `utenti.id` CASCADE DELETE |
+| `player_color_id` | varchar(32) | ID skin selezionata per il personaggio (nullable) |
+| `weapon_color_id` | varchar(32) | ID skin selezionata per l'arma (nullable) |
+
+### Configurazione connessione
+
+Imposta le credenziali in `php/db.php`:
+
+```php
+$host = 'localhost';
+$dbname = 'nome_database';
+$user = 'utente';
+$password = 'password';
+```
+
+---
+
 ## Avvio rapido
 
 ### Prerequisiti
 
 - [Node.js](https://nodejs.org/) v18 o superiore
-- PHP 8.x con PDO MySQL
+- PHP 8.x con estensioni PDO e pdo_mysql
 - MySQL / MariaDB
 
 ### Installazione
@@ -250,7 +308,11 @@ cd Shooter_Online
 npm install
 ```
 
-Configura il database in `php/db.php` con host, nome DB, utente e password, quindi importa lo schema SQL.
+Configura le credenziali del database in `php/db.php`, quindi importa lo schema:
+
+```bash
+mysql -u utente -p nome_database < bfeokmrnutfoddieljtb.sql
+```
 
 ### Avvio
 
@@ -261,6 +323,36 @@ npm start
 Apri il browser su **`http://localhost:4000`**
 
 > Per testare il multiplayer in locale apri più tab o finestre dello stesso browser.
+
+---
+
+## Deploy con Docker
+
+Il `Dockerfile` costruisce un'immagine all-in-one con **PHP 8.2 + Apache**, **Node.js 20** e **nginx**, tutti in un singolo container.
+
+### Architettura interna del container
+
+```
+Internet → nginx :10000
+               ├── /php/*  → Apache :8080 (PHP)
+               └── /*      → Node.js :4000 (gioco + Socket.IO)
+```
+
+Lo script `start.sh` avvia in sequenza:
+1. Apache sulla porta `8080`
+2. Node.js sulla porta `4000`
+3. nginx in foreground sulla porta `10000` (processo principale del container)
+
+### Build e avvio
+
+```bash
+docker build -t shooter-online .
+docker run -p 10000:10000 shooter-online
+```
+
+Apri il browser su **`http://localhost:10000`**
+
+> Ricorda di impostare le variabili d'ambiente o configurare `php/db.php` con i dati del database prima della build, oppure montare il file come volume.
 
 ---
 
@@ -279,6 +371,8 @@ Se la variabile d'ambiente `RENDER_EXTERNAL_URL` è definita, il server si auto-
    - **Start Command:** `npm start`
 4. Render assegnerà automaticamente `RENDER_EXTERNAL_URL` — il keep-alive si attiva da solo
 
+> Per il deploy su Render senza Docker assicurati che il database MySQL sia raggiungibile esternamente (es. Clever Cloud, PlanetScale, Railway) e che le credenziali in `php/db.php` siano aggiornate.
+
 ---
 
 ## Architettura
@@ -294,9 +388,9 @@ Il server usa **due livelli di namespace Socket.IO**:
 Client                          Server
   │                               │
   ├─── io("/")                    │  Namespace principale
-  │     ├── createLobby  ──────► │  Crea lobby + namespace dedicato
-  │     ├── joinLobby    ──────► │  Verifica capienza e password
-  │     └── lobbyList    ◄────── │  Lista lobby aggiornata
+  │     ├── createLobby  ───────► │  Crea lobby + namespace dedicato
+  │     ├── joinLobby    ───────► │  Verifica capienza e password
+  │     └── lobbyList    ◄─────── │  Lista lobby aggiornata
   │                               │
   └─── io("/lobby/<id>")          │  Namespace gameplay
         ├── join           ──────► │  Assegna nickname + token + skin iniziali
