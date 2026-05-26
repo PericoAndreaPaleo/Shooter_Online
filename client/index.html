@@ -24,9 +24,70 @@
             overflow-y: auto !important;
         }
     }
+
+    /* ── LOADER ── */
+    #loader {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        background: #000;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-family: 'Courier New', monospace;
+        transition: opacity 0.4s ease;
+    }
+    #loader-title {
+        color: #fff;
+        font-size: 2.2rem;
+        font-weight: bold;
+        letter-spacing: 6px;
+        text-transform: uppercase;
+    }
+    #loader-subtitle {
+        color: #555;
+        font-size: 0.75rem;
+        letter-spacing: 4px;
+        margin-top: 8px;
+        text-transform: uppercase;
+    }
+    #loader-bar-wrap {
+        margin-top: 24px;
+        width: 220px;
+        height: 2px;
+        background: #1a1a1a;
+        border-radius: 2px;
+        overflow: hidden;
+    }
+    #loader-bar {
+        height: 100%;
+        width: 0%;
+        background: #fff;
+        border-radius: 2px;
+        transition: width 0.35s ease;
+    }
+    #loader-status {
+        color: #333;
+        font-size: 0.65rem;
+        letter-spacing: 2px;
+        margin-top: 12px;
+        text-transform: uppercase;
+    }
 </style>
 </head>
 <body>
+
+<!-- Schermata di caricamento -->
+<div id="loader">
+    <div id="loader-title">Shooter Online</div>
+    <div id="loader-subtitle">by andrea perico</div>
+    <div id="loader-bar-wrap">
+        <div id="loader-bar"></div>
+    </div>
+    <div id="loader-status">inizializzazione...</div>
+</div>
+
 <script src="/socket.io/socket.io.js"></script>
 <script type="module" src="./main.js"></script>
 </body>

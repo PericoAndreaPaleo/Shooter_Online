@@ -29,6 +29,29 @@ kaboom({
     preventPauseOnBlur: true, // il gioco non si ferma quando perdi il focus
 });
 
+// ============================================================
+// LOADER — avanza la barra mentre il gioco si inizializza
+// ============================================================
+function setLoaderProgress(pct, status) {
+    const bar = document.getElementById("loader-bar");
+    const txt = document.getElementById("loader-status");
+    if (bar) bar.style.width = pct + "%";
+    if (txt && status) txt.textContent = status;
+}
+
+function hideLoader() {
+    const loader = document.getElementById("loader");
+    if (!loader) return;
+    setLoaderProgress(100, "pronto");
+    setTimeout(() => {
+        loader.style.opacity = "0";
+        setTimeout(() => loader.remove(), 400);
+    }, 300);
+}
+
+// Kaboom inizializzato → barra al 30%
+setLoaderProgress(30, "motore grafico ok");
+
 // Cursore a mirino sul canvas di gioco
 document.body.style.cursor     = "crosshair";
 document.body.style.background = "black";
@@ -147,6 +170,9 @@ export function salvaStat() {}
 // mostraSchermataAuth → mostra la schermata login/registrazione
 import { checkSession, initAuth, mostraSchermataAuth, logout } from "./auth.js";
 // ─────────────────────────────────────────────────────────────
+
+// Moduli caricati → barra al 60%
+setLoaderProgress(60, "moduli caricati");
 
 // ============================================================
 // ZOOM CAMERA
@@ -440,6 +466,9 @@ registraTouchEvents();
 registraEventiSparo(gameCanvas);
 registraOnUpdate();
 
+// Eventi registrati → barra al 85%
+setLoaderProgress(85, "connessione in corso...");
+
 /** Aggiorna le barre nere ad ogni resize della finestra */
 window.addEventListener("resize", aggiornaBlackBars);
 
@@ -522,6 +551,9 @@ initAuth(avvioGioco);
 (async function avvio() {
     // Controlla se c'è già una sessione valida (cookie httpOnly)
     const userData = await checkSession();
+
+    // Sessione verificata → nascondi il loader
+    hideLoader();
 
     if (userData) {
         // Sessione valida → avvia direttamente il gioco
