@@ -68,7 +68,7 @@ function saveToken(token) {
 }
 
 /** Legge il token dal posto giusto */
-function getToken() {
+export function getToken() {
     if (getCookieConsent() === "accepted") {
         return localStorage.getItem("auth_token");
     }

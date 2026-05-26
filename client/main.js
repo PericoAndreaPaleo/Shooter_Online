@@ -123,7 +123,7 @@ let partitaRegistrata = false;
  * No-op se l'utente non è loggato.
  */
 export function aggiornaStat(tipo) {
-    const token = localStorage.getItem("auth_token");
+    const token = getToken();
     if (!token) return;
     fetch("/php/aggiorna_stats.php", {
         method:  "POST",
@@ -142,7 +142,7 @@ export function aggiornaStat(tipo) {
  * anche se il giocatore fa selfKill + rispawn più volte.
  */
 export function registraPartita() {
-    const token = localStorage.getItem("auth_token");
+    const token = getToken();
     if (!token || partitaRegistrata) return;
     partitaRegistrata = true;
     fetch("/php/salva_statistiche.php", {
@@ -168,7 +168,7 @@ export function salvaStat() {}
 // checkSession        → verifica se l'utente ha già un cookie valido
 // initAuth            → registra il callback da chiamare dopo il login
 // mostraSchermataAuth → mostra la schermata login/registrazione
-import { checkSession, initAuth, mostraSchermataAuth, logout } from "./auth.js";
+import { checkSession, initAuth, mostraSchermataAuth, logout, getToken } from "./auth.js";
 // ─────────────────────────────────────────────────────────────
 
 // Moduli caricati → barra al 60%
@@ -265,7 +265,7 @@ function connectToLobbyNamespace(lobbyId, lobbyName, savedToken) {
         state.socket.emit("join", {
             token:         rejoinToken || null,
             username:      state.accountUsername || null,
-            authToken:     localStorage.getItem("auth_token") || null,  // ← permette al server di salvare le stat nel DB alla disconnessione
+            authToken:     getToken() || null,  // ← permette al server di salvare le stat nel DB alla disconnessione
             playerColorId: localStorage.getItem("bp_player_color") || null,
             weaponColorId: localStorage.getItem("bp_weapon_color") || null,
         });
